@@ -7,7 +7,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { supabase } from "@/lib/supabase";
 import { 
   Check, 
   Globe, 
@@ -32,8 +33,8 @@ const plans = [
     description: "Perfect for small fleets getting started with digital dispatch",
     price: 19,
     icon: Truck,
-    stripePriceMonthly: "price_1T3AbL0gB9FXYr87Ev6YKmwc",
-    stripePriceAnnual: "price_1T3AbS0gB9FXYr87sUtpsxsD",
+    stripePriceMonthly: import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY as string,
+    stripePriceAnnual: import.meta.env.VITE_STRIPE_PRICE_STARTER_ANNUAL as string,
     features: [
       "Live Fleet Tracking & Map",
       "Basic Job Dispatch",
@@ -48,8 +49,8 @@ const plans = [
     price: 35,
     icon: Zap,
     popular: true,
-    stripePriceMonthly: "price_1T3Abf0gB9FXYr87KaCF0HZe",
-    stripePriceAnnual: "price_1T3Abm0gB9FXYr87BA2oievg",
+    stripePriceMonthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY as string,
+    stripePriceAnnual: import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL as string,
     features: [
       "Everything in Starter, plus:",
       "AI Route Optimizer with TomTom Navigation",
@@ -99,11 +100,19 @@ const faqs = [
 export default function Pricing() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
 
   // Stripe Checkout — redirects to Stripe-hosted payment page
   const handleCheckout = async (plan: typeof plans[0]) => {
     if (!plan.price) {
       window.location.href = "mailto:sales@movidologistics.com?subject=Enterprise%20Plan%20Enquiry";
+      return;
+    }
+
+    // Require authentication before checkout
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setLocation("/auth?redirect=/pricing");
       return;
     }
 
@@ -113,15 +122,20 @@ export default function Pricing() {
     setLoadingPlan(plan.name);
 
     try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const res = await fetch(
-        "https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/create-checkout-session",
+        `${supabaseUrl}/functions/v1/create-checkout-session`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({
             priceId,
             successUrl: `${window.location.origin}/dashboard?checkout=success`,
             cancelUrl: `${window.location.origin}/pricing?checkout=cancelled`,
+            customerEmail: session.user.email,
           }),
         }
       );

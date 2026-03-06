@@ -20,7 +20,7 @@ interface GPSState {
   permissionGranted: boolean;
 }
 
-const UPDATE_INTERVAL = 10000; // 10 seconds
+const UPDATE_INTERVAL = 30000; // 30 seconds — battery friendly
 
 export function useGPSTracking(driverId: number | undefined) {
   const [gps, setGps] = useState<GPSState>({
@@ -70,7 +70,14 @@ export function useGPSTracking(driverId: number | undefined) {
       timestamp: location.timestamp,
     }));
 
-    await supabase.from("drivers").update(update).eq("id", driverId);
+    // Timeout after 8 seconds to avoid blocking the queue
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      await supabase.from("drivers").update(update).eq("id", driverId).abortSignal(controller.signal);
+    } finally {
+      clearTimeout(timeout);
+    }
   }, [driverId]);
 
   // Start tracking
@@ -88,7 +95,7 @@ export function useGPSTracking(driverId: number | undefined) {
     watchRef.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
-        distanceInterval: 20, // metres
+        distanceInterval: 50, // metres — reduced from 20m to save battery
         timeInterval: UPDATE_INTERVAL,
       },
       (location) => pushLocation(location)

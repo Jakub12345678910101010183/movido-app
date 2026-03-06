@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useDriverAuth } from "../hooks/useDriverAuth";
 import { supabase } from "../lib/supabase";
@@ -21,6 +21,17 @@ interface DeliveryRecord {
 export default function ProfileScreen({ navigation }: any) {
   const { profile, signOut } = useDriverAuth();
   const { lang, changeLanguage, LANGUAGES } = useLanguage();
+
+  const confirmSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: signOut },
+      ]
+    );
+  };
   const [history, setHistory] = useState<DeliveryRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -148,7 +159,7 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
 
         {/* Sign Out */}
-        <TouchableOpacity style={s.signOutBtn} onPress={signOut}>
+        <TouchableOpacity style={s.signOutBtn} onPress={confirmSignOut}>
           <Ionicons name="log-out-outline" size={18} color="#EF4444" />
           <Text style={s.signOutText}>{t("profile_sign_out")}</Text>
         </TouchableOpacity>

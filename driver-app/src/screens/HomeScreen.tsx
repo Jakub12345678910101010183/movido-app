@@ -6,7 +6,8 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
+import * as Network from "expo-network";
 import { Ionicons } from "@expo/vector-icons";
 import { useDriverAuth } from "../hooks/useDriverAuth";
 import { useGPSTracking } from "../hooks/useGPSTracking";
@@ -40,6 +41,7 @@ export default function HomeScreen({ navigation }: any) {
   const driveTimer = useDriveTimer(profile?.status || "off_duty");
   const { getQueueSize } = useOfflineQueue();
   const [offlineCount, setOfflineCount] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
 
   useDriverGeofencing(gps.latitude, gps.longitude, jobs, () => {});
   usePushNotifications(profile?.id);
@@ -49,9 +51,13 @@ export default function HomeScreen({ navigation }: any) {
     else if (profile?.status === "off_duty" && gps.isTracking) stopTracking();
   }, [profile?.status]);
 
-  // Poll offline queue size every 30s
+  // Poll offline queue size and network state every 30s
   useEffect(() => {
-    const check = async () => setOfflineCount(await getQueueSize());
+    const check = async () => {
+      setOfflineCount(await getQueueSize());
+      const net = await Network.getNetworkStateAsync();
+      setIsOnline(net.isConnected === true && net.isInternetReachable !== false);
+    };
     check();
     const t = setInterval(check, 30000);
     return () => clearInterval(t);
@@ -69,6 +75,17 @@ export default function HomeScreen({ navigation }: any) {
 
   const timerColor = timerStatusColor[driveTimer.status] || "#666";
 
+  const confirmSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: signOut },
+      ]
+    );
+  };
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -83,11 +100,19 @@ export default function HomeScreen({ navigation }: any) {
               <Text style={s.offlineBadgeText}>{offlineCount}</Text>
             </View>
           )}
-          <TouchableOpacity onPress={signOut}>
+          <TouchableOpacity onPress={confirmSignOut}>
             <Ionicons name="log-out-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Network offline banner */}
+      {!isOnline && (
+        <View style={s.offlineBanner}>
+          <Ionicons name="cloud-offline" size={14} color="#fff" />
+          <Text style={s.offlineBannerText}>No internet connection — working offline</Text>
+        </View>
+      )}
 
       <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
         {/* Status */}
@@ -241,4 +266,6 @@ const s = StyleSheet.create({
   jobCard: { backgroundColor: "#111118", borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a24" },
   empty: { alignItems: "center", paddingVertical: 32 },
   emptyText: { color: "#444", marginTop: 8, fontSize: 13 },
+  offlineBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#EF4444", paddingHorizontal: 16, paddingVertical: 8 },
+  offlineBannerText: { color: "#fff", fontSize: 12, fontWeight: "600", flex: 1 },
 });
