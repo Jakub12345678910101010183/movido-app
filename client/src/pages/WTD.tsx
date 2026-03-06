@@ -399,20 +399,20 @@ export default function WTD() {
           {/* Detail Panel */}
           <div className="space-y-4">
             <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              {selectedWTD ? selectedWTD_LIMITS.driverName : "Select a driver"}
+              {selectedWTD ? selectedWTD.driverName : "Select a driver"}
             </h2>
 
             {selectedWTD ? (
               <>
                 {/* Compliance badge */}
-                <div className={`card-terminal p-4 border ${statusConfig[selectedWTD_LIMITS.complianceStatus].bg}`}>
+                <div className={`card-terminal p-4 border ${statusConfig[selectedWTD.complianceStatus].bg}`}>
                   <div className="flex items-center gap-3">
-                    {(() => { const Ic = statusConfig[selectedWTD_LIMITS.complianceStatus].icon; return <Ic className={`w-8 h-8 ${statusConfig[selectedWTD_LIMITS.complianceStatus].color}`} />; })()}
+                    {(() => { const Ic = statusConfig[selectedWTD.complianceStatus].icon; return <Ic className={`w-8 h-8 ${statusConfig[selectedWTD.complianceStatus].color}`} />; })()}
                     <div>
-                      <p className={`text-lg font-bold ${statusConfig[selectedWTD_LIMITS.complianceStatus].color}`}>
-                        {statusConfig[selectedWTD_LIMITS.complianceStatus].label}
+                      <p className={`text-lg font-bold ${statusConfig[selectedWTD.complianceStatus].color}`}>
+                        {statusConfig[selectedWTD.complianceStatus].label}
                       </p>
-                      <p className="text-xs text-muted-foreground capitalize">{selectedWTD_LIMITS.status.replace("_", " ")}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{selectedWTD.status.replace("_", " ")}</p>
                     </div>
                   </div>
                 </div>
@@ -422,10 +422,10 @@ export default function WTD() {
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours Detail</h3>
 
                   {[
-                    { label: "Today's Drive", value: selectedWTD_LIMITS.todayDriveHours, max: 9, unit: "h", warn: 7, danger: 9 },
-                    { label: "Continuous", value: selectedWTD_LIMITS.continuousDriveHours, max: 4.5, unit: "h", warn: 3.75, danger: 4.5 },
-                    { label: "Weekly", value: selectedWTD_LIMITS.weekDriveHours, max: 56, unit: "h", warn: 48, danger: 56 },
-                    { label: "Fortnight", value: selectedWTD_LIMITS.fortnightDriveHours, max: 90, unit: "h", warn: 80, danger: 90 },
+                    { label: "Today's Drive", value: selectedWTD.todayDriveHours, max: 9, unit: "h", warn: 7, danger: 9 },
+                    { label: "Continuous", value: selectedWTD.continuousDriveHours, max: 4.5, unit: "h", warn: 3.75, danger: 4.5 },
+                    { label: "Weekly", value: selectedWTD.weekDriveHours, max: 56, unit: "h", warn: 48, danger: 56 },
+                    { label: "Fortnight", value: selectedWTD.fortnightDriveHours, max: 90, unit: "h", warn: 80, danger: 90 },
                   ].map((row) => (
                     <div key={row.label}>
                       <div className="flex justify-between text-sm mb-1">
@@ -444,10 +444,10 @@ export default function WTD() {
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Time Remaining</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "Daily", value: selectedWTD_LIMITS.remainingDailyHours, warn: 1 },
-                      { label: "Weekly", value: selectedWTD_LIMITS.remainingWeeklyHours, warn: 5 },
-                      { label: "Break in", value: selectedWTD_LIMITS.remainingContinuous, warn: 0.75 },
-                      { label: "Extended days left", value: 2 - selectedWTD_LIMITS.extendedDaysUsed, warn: 0, raw: true },
+                      { label: "Daily", value: selectedWTD.remainingDailyHours, warn: 1 },
+                      { label: "Weekly", value: selectedWTD.remainingWeeklyHours, warn: 5 },
+                      { label: "Break in", value: selectedWTD.remainingContinuous, warn: 0.75 },
+                      { label: "Extended days left", value: 2 - selectedWTD.extendedDaysUsed, warn: 0, raw: true },
                     ].map((r) => (
                       <div key={r.label} className="bg-muted/20 rounded-lg p-3 text-center">
                         <p className={`text-lg font-bold font-mono ${!r.raw && r.value <= r.warn ? "text-red-400" : "text-white"}`}>
@@ -464,8 +464,8 @@ export default function WTD() {
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Extended Days (10h) Used</h3>
                   <div className="flex gap-2">
                     {[0, 1].map((i) => (
-                      <div key={i} className={`flex-1 h-8 rounded flex items-center justify-center text-sm font-medium transition-colors ${i < selectedWTD_LIMITS.extendedDaysUsed ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-muted/20 text-muted-foreground border border-white/5"}`}>
-                        {i < selectedWTD_LIMITS.extendedDaysUsed ? "Used" : "Available"}
+                      <div key={i} className={`flex-1 h-8 rounded flex items-center justify-center text-sm font-medium transition-colors ${i < selectedWTD.extendedDaysUsed ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-muted/20 text-muted-foreground border border-white/5"}`}>
+                        {i < selectedWTD.extendedDaysUsed ? "Used" : "Available"}
                       </div>
                     ))}
                   </div>
@@ -473,24 +473,24 @@ export default function WTD() {
                 </div>
 
                 {/* Active job */}
-                {selectedWTD_LIMITS.activeJobRef && (
+                {selectedWTD.activeJobRef && (
                   <div className="card-terminal p-4 border border-primary/20">
                     <div className="flex items-center gap-2 mb-1">
                       <Truck className="w-4 h-4 text-primary" />
                       <span className="text-sm font-medium">Active Job</span>
                     </div>
-                    <p className="font-mono text-primary text-sm">#{selectedWTD_LIMITS.activeJobRef}</p>
+                    <p className="font-mono text-primary text-sm">#{selectedWTD.activeJobRef}</p>
                   </div>
                 )}
 
                 {/* Violations */}
-                {selectedWTD_LIMITS.violations.length > 0 && (
+                {selectedWTD.violations.length > 0 && (
                   <div className="card-terminal p-4 border border-red-500/20">
                     <h3 className="text-xs font-medium text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                       <XCircle className="w-3.5 h-3.5" /> Violations
                     </h3>
                     <div className="space-y-1.5">
-                      {selectedWTD_LIMITS.violations.map((v, i) => (
+                      {selectedWTD.violations.map((v, i) => (
                         <p key={i} className="text-sm text-red-300">{v}</p>
                       ))}
                     </div>
@@ -498,13 +498,13 @@ export default function WTD() {
                 )}
 
                 {/* Warnings */}
-                {selectedWTD_LIMITS.warnings.length > 0 && (
+                {selectedWTD.warnings.length > 0 && (
                   <div className="card-terminal p-4 border border-amber-500/20">
                     <h3 className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" /> Warnings
                     </h3>
                     <div className="space-y-1.5">
-                      {selectedWTD_LIMITS.warnings.map((w, i) => (
+                      {selectedWTD.warnings.map((w, i) => (
                         <p key={i} className="text-sm text-amber-300">{w}</p>
                       ))}
                     </div>
