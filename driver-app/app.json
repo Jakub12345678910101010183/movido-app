@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Movido Driver",
+    "slug": "movido-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0f"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.movido.driver",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Movido needs your location to track deliveries and provide real-time updates to dispatch.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Movido needs background location to keep tracking active during deliveries.",
+        "NSCameraUsageDescription": "Movido needs camera access to capture proof of delivery photos and truck inspection evidence.",
+        "NSPhotoLibraryUsageDescription": "Movido needs photo library access to upload delivery proof images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0f"
+      },
+      "package": "com.movido.driver",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Movido needs your location for delivery tracking."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Movido needs camera for POD photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Movido needs photos for delivery proof."
+        }
+      ]
+    ]
+  }
+}

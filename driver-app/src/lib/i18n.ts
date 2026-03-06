@@ -1,0 +1,426 @@
+/**
+ * Movido Driver App — Internationalization (i18n)
+ * Languages: English (default), Polish, Romanian
+ * Targets: HGV drivers in UK (many are PL/RO nationals)
+ */
+
+export type Language = "en" | "pl" | "ro";
+
+export const LANGUAGES: { code: Language; label: string; flag: string }[] = [
+  { code: "en", label: "English", flag: "🇬🇧" },
+  { code: "pl", label: "Polski", flag: "🇵🇱" },
+  { code: "ro", label: "Română", flag: "🇷🇴" },
+];
+
+type TranslationKeys = typeof en;
+
+// ============================================
+// ENGLISH (default)
+// ============================================
+const en = {
+  // Login
+  login_title: "MOVIDO",
+  login_subtitle: "Driver App",
+  login_email: "Email",
+  login_email_placeholder: "driver@movido.com",
+  login_password: "Password",
+  login_button: "Sign In",
+  login_error_empty: "Enter email and password",
+  login_error_failed: "Login failed",
+  login_footer: "Movido Logistics • Northampton",
+
+  // Home
+  home_greeting: "Hello",
+  home_status_on_duty: "On Duty",
+  home_status_available: "Available",
+  home_status_off_duty: "Off Duty",
+  home_status_on_break: "On Break",
+  home_tap_status: "Tap to change status",
+  home_gps_tracking: "GPS Tracking",
+  home_gps_live: "LIVE",
+  home_gps_off: "OFF",
+  home_start_tracking: "Start Tracking",
+  home_stop_tracking: "Stop Tracking",
+  home_active_job: "Active Job",
+  home_in_progress: "IN PROGRESS",
+  home_tap_open: "Tap to open →",
+  home_assigned_jobs: "Assigned Jobs",
+  home_no_pending: "No pending jobs",
+  home_scan_doc: "Scan Doc",
+  home_truck_check: "Truck Check",
+
+  // Job Detail
+  job_pickup: "PICKUP",
+  job_delivery: "DELIVERY",
+  job_no_address: "No address",
+  job_eta: "ETA",
+  job_navigate: "Navigate to Delivery",
+  job_capture_pod: "Capture POD Photo",
+  job_start_delivery: "Start Delivery",
+  job_complete_delivery: "Complete Delivery",
+  job_pod_question: "Capture POD?",
+  job_pod_prompt: "Take a photo proof of delivery before completing?",
+  job_skip: "Skip",
+  job_take_photo: "Take Photo",
+  job_pod_saved: "POD saved and job completed!",
+  job_status_pending: "Pending",
+  job_status_assigned: "Assigned",
+  job_status_in_progress: "In Progress",
+  job_status_completed: "Completed",
+
+  // Truck Check
+  check_title: "Daily Truck Check",
+  check_cat_exterior: "Exterior",
+  check_cat_under_bonnet: "Under Bonnet",
+  check_cat_cab: "Cab",
+  check_tyres: "Tyres — tread depth, pressure, damage",
+  check_lights: "All lights & indicators working",
+  check_mirrors: "Mirrors clean & adjusted",
+  check_bodywork: "Bodywork — no damage or sharp edges",
+  check_numberplate: "Number plates clean & visible",
+  check_load: "Load secure, doors/curtains fastened",
+  check_oil: "Engine oil level",
+  check_coolant: "Coolant level",
+  check_windscreen: "Windscreen washer fluid",
+  check_adblue: "AdBlue level",
+  check_brakes: "Brakes — pedal feel, handbrake",
+  check_horn: "Horn working",
+  check_wipers: "Wipers & washers",
+  check_seatbelt: "Seatbelt condition",
+  check_tacho: "Tachograph — card inserted, mode correct",
+  check_submit: "Submit Check",
+  check_defects: "defects",
+  check_incomplete: "Incomplete",
+  check_incomplete_msg: "Please check all items before submitting",
+  check_defects_reported: "Defects Reported",
+  check_defects_msg: "defect(s) reported to dispatch.",
+  check_complete: "Check Complete",
+  check_complete_msg: "Vehicle check passed. Safe to drive!",
+
+  // Messages
+  msg_dispatch_channel: "Dispatch Channel",
+  msg_realtime: "Realtime",
+  msg_no_messages: "No messages yet",
+  msg_placeholder: "Type a message...",
+  msg_dispatch: "Dispatch",
+
+  // Profile
+  profile_title: "Profile",
+  profile_total_deliveries: "Total Deliveries",
+  profile_this_period: "This Period",
+  profile_today: "Today",
+  profile_this_week: "This Week",
+  profile_hours_compliance: "Driving Hours Compliance",
+  profile_daily_max: "Daily (9h max)",
+  profile_weekly_max: "Weekly (56h max)",
+  profile_contact: "Contact",
+  profile_recent: "Recent Deliveries",
+  profile_no_history: "No delivery history",
+  profile_sign_out: "Sign Out",
+
+  // Document Scanner
+  doc_title: "Document Scanner",
+  doc_link_to_job: "LINK TO JOB",
+  doc_no_job: "No Job",
+  doc_type: "DOCUMENT TYPE",
+  doc_cmr: "CMR Note",
+  doc_delivery_note: "Delivery Note",
+  doc_customs: "Customs Document",
+  doc_damage: "Damage Report",
+  doc_other: "Other",
+  doc_scan: "Scan Document",
+  doc_scanned_today: "SCANNED TODAY",
+  doc_no_docs: "No documents scanned",
+  doc_saved: "saved for",
+
+  // Geofencing
+  geo_arrived_pickup: "You've arrived at pickup for",
+  geo_job_started: "Job started automatically.",
+  geo_at_delivery: "At Delivery",
+  geo_capture_pod: "You've arrived at the delivery point for",
+  geo_please_pod: "Please capture POD.",
+
+  // Common
+  common_error: "Error",
+  common_success: "Success",
+  common_loading: "Loading...",
+  common_cancel: "Cancel",
+  common_ok: "OK",
+  common_permission_needed: "Permission needed",
+  common_camera_required: "Camera access is required",
+};
+
+// ============================================
+// POLISH
+// ============================================
+const pl: TranslationKeys = {
+  login_title: "MOVIDO",
+  login_subtitle: "Aplikacja Kierowcy",
+  login_email: "Email",
+  login_email_placeholder: "kierowca@movido.com",
+  login_password: "Hasło",
+  login_button: "Zaloguj się",
+  login_error_empty: "Wpisz email i hasło",
+  login_error_failed: "Logowanie nie powiodło się",
+  login_footer: "Movido Logistics • Northampton",
+
+  home_greeting: "Cześć",
+  home_status_on_duty: "Na służbie",
+  home_status_available: "Dostępny",
+  home_status_off_duty: "Po służbie",
+  home_status_on_break: "Na przerwie",
+  home_tap_status: "Kliknij aby zmienić status",
+  home_gps_tracking: "Śledzenie GPS",
+  home_gps_live: "AKTYWNE",
+  home_gps_off: "WYŁ",
+  home_start_tracking: "Włącz śledzenie",
+  home_stop_tracking: "Wyłącz śledzenie",
+  home_active_job: "Aktywne zlecenie",
+  home_in_progress: "W TRAKCIE",
+  home_tap_open: "Kliknij aby otworzyć →",
+  home_assigned_jobs: "Przypisane zlecenia",
+  home_no_pending: "Brak oczekujących zleceń",
+  home_scan_doc: "Skanuj dok.",
+  home_truck_check: "Przegląd pojazdu",
+
+  job_pickup: "ODBIÓR",
+  job_delivery: "DOSTAWA",
+  job_no_address: "Brak adresu",
+  job_eta: "Szacowany czas",
+  job_navigate: "Nawiguj do dostawy",
+  job_capture_pod: "Zrób zdjęcie POD",
+  job_start_delivery: "Rozpocznij dostawę",
+  job_complete_delivery: "Zakończ dostawę",
+  job_pod_question: "Zrobić zdjęcie POD?",
+  job_pod_prompt: "Zrób zdjęcie potwierdzenia dostawy przed zakończeniem?",
+  job_skip: "Pomiń",
+  job_take_photo: "Zrób zdjęcie",
+  job_pod_saved: "POD zapisane, zlecenie zakończone!",
+  job_status_pending: "Oczekujące",
+  job_status_assigned: "Przypisane",
+  job_status_in_progress: "W trakcie",
+  job_status_completed: "Zakończone",
+
+  check_title: "Codzienny przegląd pojazdu",
+  check_cat_exterior: "Na zewnątrz",
+  check_cat_under_bonnet: "Pod maską",
+  check_cat_cab: "Kabina",
+  check_tyres: "Opony — bieżnik, ciśnienie, uszkodzenia",
+  check_lights: "Wszystkie światła i kierunkowskazy",
+  check_mirrors: "Lusterka czyste i ustawione",
+  check_bodywork: "Nadwozie — brak uszkodzeń i ostrych krawędzi",
+  check_numberplate: "Tablice rejestracyjne czyste i widoczne",
+  check_load: "Ładunek zabezpieczony, drzwi/plandeki zamknięte",
+  check_oil: "Poziom oleju silnikowego",
+  check_coolant: "Poziom płynu chłodzącego",
+  check_windscreen: "Płyn do spryskiwaczy",
+  check_adblue: "Poziom AdBlue",
+  check_brakes: "Hamulce — pedał, hamulec ręczny",
+  check_horn: "Klakson działa",
+  check_wipers: "Wycieraczki i spryskiwacze",
+  check_seatbelt: "Stan pasów bezpieczeństwa",
+  check_tacho: "Tachograf — karta włożona, tryb poprawny",
+  check_submit: "Wyślij przegląd",
+  check_defects: "usterek",
+  check_incomplete: "Niekompletne",
+  check_incomplete_msg: "Sprawdź wszystkie punkty przed wysłaniem",
+  check_defects_reported: "Usterki zgłoszone",
+  check_defects_msg: "usterek zgłoszonych do dyspozytora.",
+  check_complete: "Przegląd zakończony",
+  check_complete_msg: "Pojazd sprawny. Można jechać!",
+
+  msg_dispatch_channel: "Kanał dyspozytora",
+  msg_realtime: "Na żywo",
+  msg_no_messages: "Brak wiadomości",
+  msg_placeholder: "Napisz wiadomość...",
+  msg_dispatch: "Dyspozytor",
+
+  profile_title: "Profil",
+  profile_total_deliveries: "Łączne dostawy",
+  profile_this_period: "Ten okres",
+  profile_today: "Dziś",
+  profile_this_week: "Ten tydzień",
+  profile_hours_compliance: "Zgodność godzin jazdy",
+  profile_daily_max: "Dziennie (max 9h)",
+  profile_weekly_max: "Tygodniowo (max 56h)",
+  profile_contact: "Kontakt",
+  profile_recent: "Ostatnie dostawy",
+  profile_no_history: "Brak historii dostaw",
+  profile_sign_out: "Wyloguj się",
+
+  doc_title: "Skaner dokumentów",
+  doc_link_to_job: "PRZYPISZ DO ZLECENIA",
+  doc_no_job: "Bez zlecenia",
+  doc_type: "TYP DOKUMENTU",
+  doc_cmr: "List CMR",
+  doc_delivery_note: "Dokument dostawy",
+  doc_customs: "Dokument celny",
+  doc_damage: "Raport uszkodzeń",
+  doc_other: "Inny",
+  doc_scan: "Skanuj dokument",
+  doc_scanned_today: "ZESKANOWANE DZIŚ",
+  doc_no_docs: "Brak zeskanowanych dokumentów",
+  doc_saved: "zapisano dla",
+
+  geo_arrived_pickup: "Dotarłeś na miejsce odbioru dla",
+  geo_job_started: "Zlecenie rozpoczęte automatycznie.",
+  geo_at_delivery: "Na miejscu dostawy",
+  geo_capture_pod: "Dotarłeś na miejsce dostawy dla",
+  geo_please_pod: "Zrób zdjęcie potwierdzenia.",
+
+  common_error: "Błąd",
+  common_success: "Sukces",
+  common_loading: "Ładowanie...",
+  common_cancel: "Anuluj",
+  common_ok: "OK",
+  common_permission_needed: "Wymagane uprawnienia",
+  common_camera_required: "Wymagany dostęp do kamery",
+};
+
+// ============================================
+// ROMANIAN
+// ============================================
+const ro: TranslationKeys = {
+  login_title: "MOVIDO",
+  login_subtitle: "Aplicația Șoferului",
+  login_email: "Email",
+  login_email_placeholder: "sofer@movido.com",
+  login_password: "Parolă",
+  login_button: "Autentificare",
+  login_error_empty: "Introduceți email și parola",
+  login_error_failed: "Autentificare eșuată",
+  login_footer: "Movido Logistics • Northampton",
+
+  home_greeting: "Bună",
+  home_status_on_duty: "În serviciu",
+  home_status_available: "Disponibil",
+  home_status_off_duty: "Liber",
+  home_status_on_break: "În pauză",
+  home_tap_status: "Apasă pentru a schimba statusul",
+  home_gps_tracking: "Urmărire GPS",
+  home_gps_live: "ACTIV",
+  home_gps_off: "OPRIT",
+  home_start_tracking: "Pornește urmărirea",
+  home_stop_tracking: "Oprește urmărirea",
+  home_active_job: "Comandă activă",
+  home_in_progress: "ÎN CURS",
+  home_tap_open: "Apasă pentru a deschide →",
+  home_assigned_jobs: "Comenzi atribuite",
+  home_no_pending: "Nicio comandă în așteptare",
+  home_scan_doc: "Scanează doc.",
+  home_truck_check: "Verificare camion",
+
+  job_pickup: "RIDICARE",
+  job_delivery: "LIVRARE",
+  job_no_address: "Fără adresă",
+  job_eta: "Ora estimată",
+  job_navigate: "Navighează la livrare",
+  job_capture_pod: "Fotografiază POD",
+  job_start_delivery: "Începe livrarea",
+  job_complete_delivery: "Finalizează livrarea",
+  job_pod_question: "Fotografiază POD?",
+  job_pod_prompt: "Faceți o fotografie ca dovadă de livrare înainte de finalizare?",
+  job_skip: "Sari peste",
+  job_take_photo: "Fă o poză",
+  job_pod_saved: "POD salvat, comanda finalizată!",
+  job_status_pending: "În așteptare",
+  job_status_assigned: "Atribuit",
+  job_status_in_progress: "În curs",
+  job_status_completed: "Finalizat",
+
+  check_title: "Verificare zilnică camion",
+  check_cat_exterior: "Exterior",
+  check_cat_under_bonnet: "Sub capotă",
+  check_cat_cab: "Cabină",
+  check_tyres: "Anvelope — adâncime profil, presiune, deteriorări",
+  check_lights: "Toate luminile și semnalizările funcționează",
+  check_mirrors: "Oglinzi curate și reglate",
+  check_bodywork: "Caroserie — fără deteriorări sau margini ascuțite",
+  check_numberplate: "Plăcuțe de înmatriculare curate și vizibile",
+  check_load: "Marfă asigurată, uși/prelate fixate",
+  check_oil: "Nivel ulei motor",
+  check_coolant: "Nivel lichid răcire",
+  check_windscreen: "Lichid spălare parbriz",
+  check_adblue: "Nivel AdBlue",
+  check_brakes: "Frâne — pedală, frână de mână",
+  check_horn: "Claxon funcțional",
+  check_wipers: "Ștergătoare și spălătoare",
+  check_seatbelt: "Stare centură de siguranță",
+  check_tacho: "Tahograf — card introdus, mod corect",
+  check_submit: "Trimite verificarea",
+  check_defects: "defecte",
+  check_incomplete: "Incomplet",
+  check_incomplete_msg: "Verificați toate punctele înainte de trimitere",
+  check_defects_reported: "Defecte raportate",
+  check_defects_msg: "defect(e) raportate la dispecerat.",
+  check_complete: "Verificare completă",
+  check_complete_msg: "Vehicul verificat. Se poate conduce!",
+
+  msg_dispatch_channel: "Canal dispecerat",
+  msg_realtime: "În timp real",
+  msg_no_messages: "Niciun mesaj încă",
+  msg_placeholder: "Scrie un mesaj...",
+  msg_dispatch: "Dispecerat",
+
+  profile_title: "Profil",
+  profile_total_deliveries: "Total livrări",
+  profile_this_period: "Această perioadă",
+  profile_today: "Astăzi",
+  profile_this_week: "Săptămâna aceasta",
+  profile_hours_compliance: "Conformitate ore de conducere",
+  profile_daily_max: "Zilnic (max 9h)",
+  profile_weekly_max: "Săptămânal (max 56h)",
+  profile_contact: "Contact",
+  profile_recent: "Livrări recente",
+  profile_no_history: "Niciun istoric de livrări",
+  profile_sign_out: "Deconectare",
+
+  doc_title: "Scanner documente",
+  doc_link_to_job: "ASOCIAZĂ CU COMANDA",
+  doc_no_job: "Fără comandă",
+  doc_type: "TIP DOCUMENT",
+  doc_cmr: "Scrisoare CMR",
+  doc_delivery_note: "Notă de livrare",
+  doc_customs: "Document vamal",
+  doc_damage: "Raport daune",
+  doc_other: "Altele",
+  doc_scan: "Scanează document",
+  doc_scanned_today: "SCANATE AZI",
+  doc_no_docs: "Niciun document scanat",
+  doc_saved: "salvat pentru",
+
+  geo_arrived_pickup: "Ați ajuns la punctul de ridicare pentru",
+  geo_job_started: "Comanda a fost pornită automat.",
+  geo_at_delivery: "La punctul de livrare",
+  geo_capture_pod: "Ați ajuns la punctul de livrare pentru",
+  geo_please_pod: "Vă rugăm fotografiați dovada de livrare.",
+
+  common_error: "Eroare",
+  common_success: "Succes",
+  common_loading: "Se încarcă...",
+  common_cancel: "Anulează",
+  common_ok: "OK",
+  common_permission_needed: "Permisiuni necesare",
+  common_camera_required: "Acces la cameră necesar",
+};
+
+// ============================================
+// Translation engine
+// ============================================
+const translations: Record<Language, TranslationKeys> = { en, pl, ro };
+
+let currentLanguage: Language = "en";
+
+export function setLanguage(lang: Language) {
+  currentLanguage = lang;
+}
+
+export function getLanguage(): Language {
+  return currentLanguage;
+}
+
+export function t(key: keyof TranslationKeys): string {
+  return translations[currentLanguage]?.[key] || translations.en[key] || key;
+}
+
+export default { t, setLanguage, getLanguage, LANGUAGES };

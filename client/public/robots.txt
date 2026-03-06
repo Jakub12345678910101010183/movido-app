@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+Disallow: /auth/callback
+Disallow: /dashboard
+Disallow: /jobs
+Disallow: /fleet
+Disallow: /drivers
+Disallow: /routes
+Disallow: /messenger
+Disallow: /maintenance
+Disallow: /pod
+Disallow: /alerts
+Disallow: /analytics
+Disallow: /reports
+Disallow: /settings
+Disallow: /incidents
+Disallow: /fuel-reports
+Disallow: /document-scanner
+Disallow: /wtd
+
+# Sitemap
+Sitemap: https://movidologistics.uk/sitemap.xml
