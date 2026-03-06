@@ -21,8 +21,8 @@
     },
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.movidologistics.uk" }],
-      "destination": "https://movidologistics.uk/$1",
+      "has": [{ "type": "host", "value": "movidologistics.uk" }],
+      "destination": "https://www.movidologistics.uk/$1",
       "permanent": true
     }
   ],
