@@ -59,8 +59,8 @@ export default function HomeScreen({ navigation }: any) {
       setIsOnline(net.isConnected === true && net.isInternetReachable !== false);
     };
     check();
-    const t = setInterval(check, 30000);
-    return () => clearInterval(t);
+    const intervalId = setInterval(check, 30000);
+    return () => clearInterval(intervalId);
   }, [getQueueSize]);
 
   const activeJob = jobs.find((j) => j.status === "in_progress");

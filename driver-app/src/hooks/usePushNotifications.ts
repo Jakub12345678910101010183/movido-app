@@ -30,13 +30,13 @@ export function usePushNotifications(driverId: number | undefined) {
     registerAndSaveToken(driverId);
 
     // Listen for foreground notifications
-    notifListenerRef.current = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("[Push] Received:", notification.request.content.title);
+    notifListenerRef.current = Notifications.addNotificationReceivedListener((_notification) => {
+      // Notification received while app is in foreground — handled by setNotificationHandler above
     });
 
     // Listen for notification taps
-    responseListenerRef.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("[Push] Tapped:", response.notification.request.content.data);
+    responseListenerRef.current = Notifications.addNotificationResponseReceivedListener((_response) => {
+      // Handle notification tap — extend here to navigate to relevant screen
     });
 
     return () => {

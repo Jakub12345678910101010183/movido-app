@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Truck, LogIn, UserPlus, AlertCircle, Loader2 } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 export default function Login() {
   const { signInWithEmail, signUpWithEmail } = useAuthContext();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const redirectTo = new URLSearchParams(search).get("redirect") || "/dashboard";
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +33,7 @@ export default function Login() {
     try {
       if (mode === "login") {
         await signInWithEmail(email, password);
-        setLocation("/dashboard");
+        setLocation(redirectTo);
       } else {
         await signUpWithEmail(email, password, name);
         setShowConfirmation(true);

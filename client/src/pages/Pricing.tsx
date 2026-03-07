@@ -112,7 +112,7 @@ export default function Pricing() {
     // Require authentication before checkout
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      setLocation("/auth?redirect=/pricing");
+      setLocation("/login?redirect=/pricing");
       return;
     }
 
