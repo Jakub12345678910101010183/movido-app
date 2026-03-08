@@ -521,10 +521,10 @@ export default function Pricing() {
               Start your 14-day free trial today. No credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="glow-cyan">
+              <Button size="lg" className="glow-cyan" onClick={() => handleCheckout(plans[1])}>
                 Start Free Trial
               </Button>
-              <Button size="lg" variant="outline">
+              <Button size="lg" variant="outline" onClick={() => window.location.href = 'mailto:movidologistics@gmail.com?subject=Sales%20Enquiry'}>
                 Contact Sales
               </Button>
             </div>
