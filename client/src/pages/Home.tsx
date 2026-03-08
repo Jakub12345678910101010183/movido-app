@@ -99,10 +99,10 @@ export default function Home() {
       <section className="relative pt-32 pb-20 overflow-hidden min-h-[90vh] flex items-center">
         {/* Background Image */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          className="absolute inset-0 bg-cover bg-bottom bg-no-repeat"
           style={{ backgroundImage: 'url(/images/hero-fleet.jpg)' }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/70 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/40 to-background/70" />
         <div className="absolute inset-0 grid-pattern opacity-30" />
         
         <div className="container relative">
@@ -249,13 +249,13 @@ export default function Home() {
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: 'url(/images/truck-route.jpg)' }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/60 to-transparent" />
         
         <div className="container relative">
           <div className="max-w-xl">
             <h2 className="text-4xl font-bold mb-6">Built for British Roads</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Based in Northampton — the heart of UK logistics — Movido is built for British roads. Our platform handles HGV-specific routing, low bridge warnings, weight restrictions, Clean Air Zones, and DVSA compliance. From the M1 corridor to nationwide distribution, we understand UK transport.
+              Based in Northampton â the heart of UK logistics â Movido is built for British roads. Our platform handles HGV-specific routing, low bridge warnings, weight restrictions, Clean Air Zones, and DVSA compliance. From the M1 corridor to nationwide distribution, we understand UK transport.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="card-terminal p-4">
@@ -301,27 +301,27 @@ export default function Home() {
         <div className="absolute inset-0 grid-pattern opacity-20" />
         <div className="container relative">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left — Text */}
+            {/* Left â Text */}
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-primary/30 bg-primary/5">
                 <Smartphone className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium text-primary">Movido Driver App</span>
               </div>
               <h2 className="text-4xl font-bold mb-6">
-                Everything Your Drivers Need — In Their Pocket
+                Everything Your Drivers Need â In Their Pocket
               </h2>
               <p className="text-muted-foreground text-lg mb-8">
-                The Movido Driver App puts professional-grade logistics tools right in your drivers' hands. HGV-aware navigation, digital POD capture, fuel logging, and real-time job updates — all offline-capable.
+                The Movido Driver App puts professional-grade logistics tools right in your drivers' hands. HGV-aware navigation, digital POD capture, fuel logging, and real-time job updates â all offline-capable.
               </p>
 
               <ul className="space-y-4 mb-10">
                 {[
-                  { icon: Navigation, text: "HGV Navigation via TomTom — truck-safe routes with bridge & weight alerts" },
-                  { icon: Camera, text: "Digital POD — photo capture + customer signature, no paperwork" },
-                  { icon: Clock, text: "WTD Hours tracker — EU driving regulations built-in" },
-                  { icon: Fuel, text: "Fuel log — record every stop with GPS location auto-fill" },
-                  { icon: Bell, text: "Push notifications — instant job assignments & status updates" },
-                  { icon: CheckCircle2, text: "Offline-capable — works in areas with poor signal" },
+                  { icon: Navigation, text: "HGV Navigation via TomTom â truck-safe routes with bridge & weight alerts" },
+                  { icon: Camera, text: "Digital POD â photo capture + customer signature, no paperwork" },
+                  { icon: Clock, text: "WTD Hours tracker â EU driving regulations built-in" },
+                  { icon: Fuel, text: "Fuel log â record every stop with GPS location auto-fill" },
+                  { icon: Bell, text: "Push notifications â instant job assignments & status updates" },
+                  { icon: CheckCircle2, text: "Offline-capable â works in areas with poor signal" },
                 ].map(({ icon: Icon, text }, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -355,11 +355,11 @@ export default function Home() {
               </div>
               <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
                 <Download className="w-3 h-3" />
-                Available as an Expo/React Native build for beta testers — contact us to join
+                Available as an Expo/React Native build for beta testers â contact us to join
               </p>
             </div>
 
-            {/* Right — Phone Mockup */}
+            {/* Right â Phone Mockup */}
             <div className="flex justify-center lg:justify-end">
               <div className="relative">
                 {/* Glow */}
@@ -385,7 +385,7 @@ export default function Home() {
                     <div className="bg-[#111118] rounded-xl p-3 border border-[#1a1a24] mb-3">
                       <div className="text-[9px] text-[#666] uppercase tracking-wider mb-1">Current Job</div>
                       <div className="text-[12px] font-bold text-white">MV-2847</div>
-                      <div className="text-[10px] text-[#aaa] mt-1">Northampton → Leicester</div>
+                      <div className="text-[10px] text-[#aaa] mt-1">Northampton â Leicester</div>
                       <div className="flex items-center gap-1 mt-2">
                         <div className="flex-1 h-1 bg-[#1a1a24] rounded-full">
                           <div className="w-3/4 h-1 bg-[#00FFD4] rounded-full" />
@@ -412,9 +412,9 @@ export default function Home() {
                     {/* Action buttons */}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { icon: "📷", label: "POD" },
-                        { icon: "⛽", label: "Fuel" },
-                        { icon: "🛡️", label: "WTD" },
+                        { icon: "ð·", label: "POD" },
+                        { icon: "â½", label: "Fuel" },
+                        { icon: "ð¡ï¸", label: "WTD" },
                       ].map((btn) => (
                         <div key={btn.label} className="bg-[#111118] rounded-lg p-2 text-center border border-[#1a1a24]">
                           <div className="text-sm mb-1">{btn.icon}</div>
