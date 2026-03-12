@@ -144,7 +144,7 @@ export function useAuth() {
         if (data.user) {
                 try {
                           const confirmationUrl = `${window.location.origin}/verify?token=${data.session?.access_token}`;
-                          await supabase.functions.invoke("send-verification-email", {
+                          await supabase.functions.invoke('send-verification-emai'", {
                                       body: {
                                                     email: data.user.email,
                                                     confirmationUrl,
@@ -152,7 +152,7 @@ export function useAuth() {
                                       },
                           });
                 } catch (emailError) {
-                          console.warn("[Auth] Failed to send verification email:", emailError);
+                          console.warn('[Auth] Failed to send verification email:', emailError);
                           // Don't fail signup if email fails
                 }
         }
