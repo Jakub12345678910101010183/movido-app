@@ -1,4 +1,4 @@
-/signUpWithEmail**
+/send-verification-emailsignUpWithEmail**
  * Supabase Auth Hook
  * Replaces the Manus OAuth system with Supabase Auth
  * Provides login, logout, session management
@@ -144,8 +144,7 @@ export function useAuth() {
         if (data.user) {
                 try {
                           const confirmationUrl = `${window.location.origin}/verify?token=${data.session?.access_token}`;
-                          await supabase.functions.invoke('send-verification-emai'", {
-                                      body: {
+            await supabase.functions.invoke('send-verification-email', {                                      body: {
                                                     email: data.user.email,
                                                     confirmationUrl,
                                                     userName: name || email.split("@")[0],
