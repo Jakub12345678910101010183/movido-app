@@ -1,4 +1,4 @@
-/send-verification-emailsignUpWithEmail**
+/**
  * Supabase Auth Hook
  * Replaces the Manus OAuth system with Supabase Auth
  * Provides login, logout, session management
