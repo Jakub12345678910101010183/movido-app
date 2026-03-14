@@ -14,11 +14,10 @@ import { Link } from "wouter";
 import {
   Truck, MapPin, Clock, Fuel, AlertTriangle, Settings, Satellite,
   Map as MapIcon, ChevronRight, RefreshCw, Navigation, Shield, Zap,
-  Route, FileCheck, X, ChevronDown, ChevronUp, Smartphone, Brain,
+  Route, FileCheck, X, ChevronDown, ChevronUp, Smartphone,
   Target, Loader2, Wifi, WifiOff, Sparkles,
 } from "lucide-react";
 import { TomTomMap, type MapMarker } from "@/components/TomTomMap";
-import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 import { AIDispatcher } from "@/components/AIDispatcher";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
@@ -58,7 +57,6 @@ export default function Dashboard() {
   const [showHGVLayers, setShowHGVLayers] = useState(true);
   const [showCAZLayers, setShowCAZLayers] = useState(true);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
-  const [showAIPlanner, setShowAIPlanner] = useState(false);
   const [showETAPanel, setShowETAPanel] = useState(false);
   const [showAIDispatcher, setShowAIDispatcher] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
@@ -207,7 +205,6 @@ export default function Dashboard() {
         </div>
 
         <div className="p-4 border-b border-border">
-          <Button className="w-full glow-cyan-sm" onClick={() => setShowAIPlanner(true)}><Brain className="w-4 h-4 mr-2" />Plan New AI Route</Button>
           <Button variant="outline" className="w-full border-primary/30" onClick={() => setShowAIDispatcher(true)}><Sparkles className="w-4 h-4 mr-2" />AI Dispatcher</Button>
         </div>
 
@@ -397,7 +394,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} onSaveJob={() => { refetchJobs(); }} />
       <AIDispatcher open={showAIDispatcher} onClose={() => setShowAIDispatcher(false)} />
       </div>{/* end flex-1 row */}
     </div>

@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
+import {
   Settings as SettingsIcon,
   Map,
   Bell,
@@ -23,9 +23,11 @@ import {
   LogOut,
   Shield,
   Loader2,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 import { supabase } from "@/lib/supabase";
 import { useLocation } from "wouter";
 
@@ -34,6 +36,7 @@ export default function Settings() {
   const [, setLocation] = useLocation();
   const [profileName, setProfileName] = useState(profile?.full_name || "");
   const [profileSaving, setProfileSaving] = useState(false);
+  const [showAIPlanner, setShowAIPlanner] = useState(false);
 
   // Distance unit preference
   const [useMiles, setUseMiles] = useState(() => {
@@ -45,15 +48,15 @@ export default function Settings() {
   const [showLowBridges, setShowLowBridges] = useState(() => {
     return localStorage.getItem('movido-show-bridges') !== 'false';
   });
-  
+
   const [showCAZ, setShowCAZ] = useState(() => {
     return localStorage.getItem('movido-show-caz') !== 'false';
   });
-  
+
   const [notifications, setNotifications] = useState(() => {
     return localStorage.getItem('movido-notifications') !== 'false';
   });
-  
+
   const [darkMode, setDarkMode] = useState(true);
 
   const saveSettings = () => {
@@ -150,7 +153,7 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Your organization details</p>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Company Name</Label>
@@ -182,7 +185,7 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Regional preferences</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
@@ -191,14 +194,14 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`text-sm ${useMiles ? 'text-primary font-medium' : 'text-muted-foreground'}`}>Miles</span>
-                  <Switch 
-                    checked={!useMiles} 
+                  <Switch
+                    checked={!useMiles}
                     onCheckedChange={(checked) => setUseMiles(!checked)}
                   />
                   <span className={`text-sm ${!useMiles ? 'text-primary font-medium' : 'text-muted-foreground'}`}>KM</span>
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
                   <p className="font-medium">Currency</p>
@@ -232,26 +235,26 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">TomTom integration settings</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
                   <p className="font-medium">Low Bridge Warnings</p>
                   <p className="text-sm text-muted-foreground">Show UK low bridge database overlay</p>
                 </div>
-                <Switch 
-                  checked={showLowBridges} 
+                <Switch
+                  checked={showLowBridges}
                   onCheckedChange={setShowLowBridges}
                 />
               </div>
-              
+
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
                   <p className="font-medium">Clean Air Zones (CAZ/ULEZ)</p>
                   <p className="text-sm text-muted-foreground">Display UK Clean Air Zone boundaries</p>
                 </div>
-                <Switch 
-                  checked={showCAZ} 
+                <Switch
+                  checked={showCAZ}
                   onCheckedChange={setShowCAZ}
                 />
               </div>
@@ -263,7 +266,7 @@ export default function Settings() {
                 </div>
                 <Switch defaultChecked />
               </div>
-              
+
               <div className="p-4 rounded-lg bg-primary/5 border border-primary/30">
                 <p className="text-sm text-muted-foreground">
                   <strong className="text-primary">Satellite View:</strong> Use the three-click navigation in the Dashboard map controls to toggle satellite imagery.
@@ -283,7 +286,7 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Alert preferences</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
@@ -298,8 +301,8 @@ export default function Settings() {
                   <p className="font-medium">Delivery Updates</p>
                   <p className="text-sm text-muted-foreground">POD confirmations, ETA changes</p>
                 </div>
-                <Switch 
-                  checked={notifications} 
+                <Switch
+                  checked={notifications}
                   onCheckedChange={setNotifications}
                 />
               </div>
@@ -325,7 +328,7 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Interface theme</p>
               </div>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
                 <div>
@@ -334,8 +337,8 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Sun className="w-4 h-4 text-muted-foreground" />
-                  <Switch 
-                    checked={darkMode} 
+                  <Switch
+                    checked={darkMode}
                     onCheckedChange={setDarkMode}
                     disabled
                   />
@@ -348,6 +351,28 @@ export default function Settings() {
             </div>
           </section>
 
+          {/* AI Route Planning */}
+          <section className="card-terminal p-6 border border-cyan-500/30 bg-cyan-500/5">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-cyan-500" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-cyan-400">AI Route Planning</h2>
+                <p className="text-xs text-muted-foreground">Intelligent route optimization and sequencing</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground mb-6">
+              Use our AI-powered route planner to automatically optimize stop sequencing based on traffic conditions, HGV restrictions, and delivery priorities. Movido AI intelligently sequences your jobs to minimize travel time and cost.
+            </p>
+
+            <Button onClick={() => setShowAIPlanner(true)} className="glow-cyan-sm">
+              <Brain className="w-4 h-4 mr-2" />
+              Plan New AI Route
+            </Button>
+          </section>
+
           {/* Save Button */}
           <div className="flex justify-end">
             <Button onClick={saveSettings} className="glow-cyan-sm">
@@ -356,6 +381,8 @@ export default function Settings() {
             </Button>
           </div>
         </div>
+
+        <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} onSaveJob={() => {}} />
       </div>
     </DashboardLayout>
   );
