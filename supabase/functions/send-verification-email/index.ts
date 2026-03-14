@@ -23,8 +23,7 @@ serve(async (req) => {
               const { email, confirmationUrl, userName } = await req.json()
 
       const data = await resend.emails.send({
-              from: "noreply@movidologistics.co.uk,
-              to: email,
+            from: "noreply@movidologistics.uk",              to: email,
               subject: "Verify your Movido account",
               html: `
                       <!DOCTYPE html>
