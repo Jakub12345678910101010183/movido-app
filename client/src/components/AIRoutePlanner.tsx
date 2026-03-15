@@ -239,11 +239,41 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
         straightDist += haversine(waypoints[i].lat, waypoints[i].lng, waypoints[i + 1].lat, waypoints[i + 1].lng);
       }
 
-      // 3) TomTom HGV routing for the optimized sequence
-      const routeResult = await tomtomCalculateRoute(
-        ordered.map((w) => ({ lat: w.lat, lng: w.lng })),
-        { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, traffic: true }
-      );
+      // 3) TomTom HGV routing with retry logic for Navigator lock timeout
+      let routeResult = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries && !routeResult) {
+        try {
+          // Add delay before request to avoid lock conflicts
+          if (retryCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1500 * (retryCount + 1)));
+            toast.info(`Retrying route optimization (attempt ${retryCount + 1}/${maxRetries})`);
+          } else {
+            // Initial small delay to ensure TomTom SDK is ready
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
+          routeResult = await tomtomCalculateRoute(
+            ordered.map((w) => ({ lat: w.lat, lng: w.lng })),
+            { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, traffic: false }
+          );
+          break;
+        } catch (err: any) {
+          if (err?.message?.includes('Navigator') || err?.message?.includes('timeout')) {
+            retryCount++;
+            if (retryCount >= maxRetries) {
+              console.error("[AIRoutePlanner] Navigator lock timeout after retries:", err);
+              // Continue with fallback
+            } else {
+              continue;
+            }
+          } else {
+            throw err;
+          }
+        }
+      }
 
       // 4) Check for HGV alerts
       const alerts = checkRouteAlerts(ordered, vehicleHeight);
@@ -271,11 +301,11 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
           sequence, totalDistance: totalDist, totalDuration: totalDist / 15, // ~15m/s avg
           distanceSaved: Math.max(0, straightDist - totalDist), fuelSaved: 0, alerts, routePoints: [],
         });
-        toast.success("Route optimized (estimated distances — TomTom routing unavailable)");
+        toast.success("Route optimized (estimated distances — TomTom API temporarily unavailable)");
       }
     } catch (err) {
       console.error("[AIRoutePlanner] Optimize error:", err);
-      toast.error("Failed to optimize route");
+      toast.error("Failed to optimize route. Please try again in a moment.");
     } finally { setIsOptimizing(false); }
   }, [waypoints, vehicleHeight, vehicleWeight]);
 
