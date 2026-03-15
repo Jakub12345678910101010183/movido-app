@@ -51,33 +51,52 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // First, try to get the session from Supabase storage
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (session?.user && mounted) {
-          const profile = await fetchProfile(session.user.id);
-          setState({
-            user: session.user,
-            profile,
-            session,
-            isLoading: false,
-            isAuthenticated: true,
-          });
-        } else if (mounted) {
+        if (!mounted) return;
+
+        if (sessionError) {
+          console.warn("[Auth] Session error:", sessionError);
           setState(prev => ({ ...prev, isLoading: false }));
+          return;
         }
-      } catch {
+
+        if (session?.user) {
+          // Session found, fetch profile
+          const profile = await fetchProfile(session.user.id);
+          if (mounted) {
+            setState({
+              user: session.user,
+              profile,
+              session,
+              isLoading: false,
+              isAuthenticated: true,
+            });
+          }
+        } else {
+          // No session, allow auth state change listener to handle
+          if (mounted) {
+            setState(prev => ({ ...prev, isLoading: false }));
+          }
+        }
+      } catch (err) {
+        console.warn("[Auth] Init error:", err);
         if (mounted) {
           setState(prev => ({ ...prev, isLoading: false }));
         }
       }
     };
 
+    // Start auth initialization
     initAuth();
 
-    // Listen for auth changes
+    // Listen for auth changes (handles refresh token, sign out, etc)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+
+        console.log("[Auth] Event:", event, "Session:", !!session);
 
         if (event === "SIGNED_IN" && session?.user) {
           const profile = await fetchProfile(session.user.id);
@@ -102,13 +121,23 @@ export function useAuth() {
             session,
             user: session.user,
           }));
+        } else if (event === "INITIAL_SESSION" && session?.user) {
+          // Handle initial session on app startup
+          const profile = await fetchProfile(session.user.id);
+          setState({
+            user: session.user,
+            profile,
+            session,
+            isLoading: false,
+            isAuthenticated: true,
+          });
         }
       }
     );
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, [fetchProfile]);
 
