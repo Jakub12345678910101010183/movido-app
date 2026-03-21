@@ -62,9 +62,12 @@ const retryWithBackoff = async <T,>(
  */
 const restoreSessionFromStorage = (): Session | null => {
   try {
-    const sessionStr = localStorage.getItem('supabase.auth.token');
+    // CRITICAL FIX: Use the SAME key that forceSessionToLocalStorage() saves to
+    // Supabase project ID: zjvozjnbvrtrrpehqdpf
+    const storageKey = 'sb-zjvozjnbvrtrrpehqdpf-auth-token';
+    const sessionStr = localStorage.getItem(storageKey);
     if (!sessionStr) {
-      console.log('[Auth Storage] No session token found in localStorage');
+      console.log('[Auth Storage] No session token found in localStorage (checked key:', storageKey, ')');
       return null;
     }
 
