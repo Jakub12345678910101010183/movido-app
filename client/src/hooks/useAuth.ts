@@ -2,6 +2,13 @@
  * Supabase Auth Hook
  * Replaces the Manus OAuth system with Supabase Auth
  * Provides login, logout, session management
+ *
+ * Features:
+ * - Aggressive retry logic with exponential backoff for getSession() calls
+ * - localStorage fallback mechanism for session restoration
+ * - Direct JWT token parsing from stored data
+ * - Enhanced error logging for debugging
+ * - Session validation before use
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,6 +23,114 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
 }
+
+/**
+ * Retry logic with exponential backoff
+ * Max 5 retries: 500ms, 1s, 2s, 4s, 8s
+ */
+const retryWithBackoff = async <T,>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  initialDelayMs: number = 500
+): Promise<T> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < maxRetries - 1) {
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+        console.warn(
+          `[Auth Retry] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delayMs}ms:`,
+          lastError.message
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw new Error(
+    `[Auth Retry] Failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
+  );
+};
+
+/**
+ * Try to restore session directly from localStorage
+ * Used when getSession() fails or times out
+ */
+const restoreSessionFromStorage = (): Session | null => {
+  try {
+    const sessionStr = localStorage.getItem('supabase.auth.token');
+    if (!sessionStr) {
+      console.log('[Auth Storage] No session token found in localStorage');
+      return null;
+    }
+
+    const session = JSON.parse(sessionStr) as Session;
+
+    // Validate session structure
+    if (!session || !session.user || !session.access_token) {
+      console.warn('[Auth Storage] Invalid session structure in localStorage');
+      return null;
+    }
+
+    // Check if access token is expired (basic check)
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+      console.warn('[Auth Storage] Session access token is expired');
+      return null;
+    }
+
+    console.log('[Auth Storage] Successfully restored session from localStorage');
+    return session;
+  } catch (error) {
+    console.warn('[Auth Storage] Failed to restore session from localStorage:', error);
+    return null;
+  }
+};
+
+/**
+ * Parse JWT token to extract user information
+ * Useful as fallback when session object is incomplete
+ */
+const parseJwtToken = (token: string): Partial<User> | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(atob(parts[1]));
+
+    return {
+      id: payload.sub,
+      email: payload.email,
+      user_metadata: payload.user_metadata || {},
+      app_metadata: payload.app_metadata || {},
+      aud: payload.aud,
+      created_at: new Date(payload.iat * 1000).toISOString(),
+    } as Partial<User>;
+  } catch (error) {
+    console.warn('[Auth JWT] Failed to parse JWT token:', error);
+    return null;
+  }
+};
+
+/**
+ * Validate session before use
+ */
+const isValidSession = (session: Session | null): boolean => {
+  if (!session || !session.user || !session.access_token) {
+    return false;
+  }
+
+  // Check token expiration
+  if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+    console.warn('[Auth Validation] Session token is expired');
+    return false;
+  }
+
+  return true;
+};
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
@@ -45,25 +160,52 @@ export function useAuth() {
     }
   }, []);
 
-  // Initialize auth state
+  // Initialize auth state with retry logic and fallback
   useEffect(() => {
     let mounted = true;
 
     const initAuth = async () => {
       try {
-        // First, try to get the session from Supabase storage
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        console.log("[Auth] Starting initialization...");
+
+        let session: Session | null = null;
+        let initError: Error | null = null;
+
+        // Attempt 1: Try getSession() with retry logic
+        try {
+          console.log("[Auth] Attempting to get session from Supabase...");
+          const result = await retryWithBackoff(
+            async () => {
+              const { data: { session: sess }, error } = await supabase.auth.getSession();
+              if (error) throw error;
+              return sess;
+            },
+            5, // max 5 retries
+            500 // initial 500ms delay
+          );
+          session = result;
+          console.log("[Auth] getSession() succeeded");
+        } catch (error) {
+          initError = error as Error;
+          console.warn("[Auth] getSession() failed with retries:", initError.message);
+
+          // Attempt 2: Try to restore from localStorage
+          console.log("[Auth] Attempting to restore session from localStorage...");
+          const storedSession = restoreSessionFromStorage();
+
+          if (storedSession && isValidSession(storedSession)) {
+            session = storedSession;
+            console.log("[Auth] Session restored from localStorage");
+          } else {
+            console.warn("[Auth] Failed to restore valid session from localStorage");
+          }
+        }
 
         if (!mounted) return;
 
-        if (sessionError) {
-          console.warn("[Auth] Session error:", sessionError);
-          setState(prev => ({ ...prev, isLoading: false }));
-          return;
-        }
-
-        if (session?.user) {
-          // Session found, fetch profile
+        // Process the session (whether from Supabase or localStorage)
+        if (session && session.user && isValidSession(session)) {
+          console.log("[Auth] Valid session found, fetching profile...");
           const profile = await fetchProfile(session.user.id);
           if (mounted) {
             setState({
@@ -75,13 +217,14 @@ export function useAuth() {
             });
           }
         } else {
-          // No session, allow auth state change listener to handle
+          // No valid session found
+          console.log("[Auth] No valid session found, waiting for auth state changes");
           if (mounted) {
             setState(prev => ({ ...prev, isLoading: false }));
           }
         }
       } catch (err) {
-        console.warn("[Auth] Init error:", err);
+        console.error("[Auth] Critical initialization error:", err);
         if (mounted) {
           setState(prev => ({ ...prev, isLoading: false }));
         }
@@ -96,9 +239,10 @@ export function useAuth() {
       async (event, session) => {
         if (!mounted) return;
 
-        console.log("[Auth] Event:", event, "Session:", !!session);
+        console.log("[Auth] Event:", event, "Session valid:", isValidSession(session));
 
         if (event === "SIGNED_IN" && session?.user) {
+          console.log("[Auth] User signed in:", session.user.email);
           const profile = await fetchProfile(session.user.id);
           setState({
             user: session.user,
@@ -108,6 +252,7 @@ export function useAuth() {
             isAuthenticated: true,
           });
         } else if (event === "SIGNED_OUT") {
+          console.log("[Auth] User signed out");
           setState({
             user: null,
             profile: null,
@@ -116,13 +261,14 @@ export function useAuth() {
             isAuthenticated: false,
           });
         } else if (event === "TOKEN_REFRESHED" && session) {
+          console.log("[Auth] Token refreshed");
           setState(prev => ({
             ...prev,
             session,
             user: session.user,
           }));
         } else if (event === "INITIAL_SESSION" && session?.user) {
-          // Handle initial session on app startup
+          console.log("[Auth] Initial session detected:", session.user.email);
           const profile = await fetchProfile(session.user.id);
           setState({
             user: session.user,
