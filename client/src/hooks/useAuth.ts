@@ -132,6 +132,33 @@ const isValidSession = (session: Session | null): boolean => {
   return true;
 };
 
+/**
+ * Emergency override: Force save session to localStorage
+ * Bypasses Supabase's lock-based persistence that may timeout
+ * Uses the exact same key that Supabase uses internally
+ */
+const forceSessionToLocalStorage = async (session: Session | null): Promise<void> => {
+  if (!session || !session.user || !session.access_token) {
+    console.warn('[Auth] Cannot save invalid session to localStorage');
+    return;
+  }
+
+  try {
+    // Supabase project ID: zjvozjnbvrtrrpehqdpf
+    const storageKey = 'sb-zjvozjnbvrtrrpehqdpf-auth-token';
+
+    // Save the full session object as JSON
+    const sessionJson = JSON.stringify(session);
+    localStorage.setItem(storageKey, sessionJson);
+
+    console.log('[Auth] Emergency session save to localStorage: SUCCESS');
+    console.log('[Auth] Saved to key:', storageKey);
+    console.log('[Auth] Session user:', session.user.email);
+  } catch (error) {
+    console.error('[Auth] Emergency session save to localStorage: FAILED', error);
+  }
+};
+
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -243,6 +270,8 @@ export function useAuth() {
 
         if (event === "SIGNED_IN" && session?.user) {
           console.log("[Auth] User signed in:", session.user.email);
+          // Emergency override: force save session to localStorage
+          await forceSessionToLocalStorage(session);
           const profile = await fetchProfile(session.user.id);
           setState({
             user: session.user,
@@ -262,6 +291,8 @@ export function useAuth() {
           });
         } else if (event === "TOKEN_REFRESHED" && session) {
           console.log("[Auth] Token refreshed");
+          // Emergency override: update session in localStorage when token is refreshed
+          await forceSessionToLocalStorage(session);
           setState(prev => ({
             ...prev,
             session,
@@ -269,6 +300,8 @@ export function useAuth() {
           }));
         } else if (event === "INITIAL_SESSION" && session?.user) {
           console.log("[Auth] Initial session detected:", session.user.email);
+          // Emergency override: force save session to localStorage
+          await forceSessionToLocalStorage(session);
           const profile = await fetchProfile(session.user.id);
           setState({
             user: session.user,
