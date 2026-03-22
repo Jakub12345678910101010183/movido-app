@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation } from "wouter"
 import { supabase } from "@/lib/supabase";
 import { 
   Check, 
@@ -242,11 +242,11 @@ export default function Pricing() {
                 </div>
                 
                 <Button 
-                  className={`w-full mb-6 ${plan.popular ? 'glow-cyan-sm' : ''}`}
+                  className={`w-full mb-6 cursor-pointer ${plan.popular ? 'glow-cyan-sm' : ''}`}
                   variant={plan.popular ? 'default' : 'outline'}
-                  onClick={() => handleCheckout(plan)}
-                  disabled={loadingPlan === plan.name}
-                >
+        onClick={(e) => { e.preventDefault(); handleCheckout(plan); }}                  disabled={loadingPlan === plan.name}
+                
+                          type="button">
                   {loadingPlan === plan.name ? 'Redirecting...' : plan.price ? 'Get Started' : 'Contact Sales'}
                 </Button>
                 
