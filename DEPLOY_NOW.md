@@ -1,0 +1,148 @@
+# ⚡ DEPLOY MIGRATIONS - Easy Copy-Paste Guide
+
+**Time Required:** 5 minutes
+**Difficulty:** Very Easy
+
+---
+
+## 🎯 Quick Steps
+
+### Step 1: Go to Supabase SQL Editor
+```
+https://supabase.com/dashboard
+→ Click your "Movido Smart transport Project"
+→ Click "SQL Editor" in left sidebar
+→ Click "+ New" button to create a new query
+```
+
+### Step 2: Copy & Paste Migration 005
+Copy the SQL below and paste it into the SQL Editor:
+
+```sql
+-- ============================================
+-- Migration 005: Geofence Events System
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS geofence_events (
+  id BIGSERIAL PRIMARY KEY,
+  job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL CHECK (event_type IN ('pickup_arrival', 'delivery_arrival')),
+  triggered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  location_lat DOUBLE PRECISION,
+  location_lng DOUBLE PRECISION,
+  gps_accuracy DOUBLE PRECISION,
+  status_before TEXT,
+  status_after TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(job_id, event_type, DATE_TRUNC('minute'::text, triggered_at)::integer / 5)
+);
+
+CREATE INDEX IF NOT EXISTS idx_geofence_job ON geofence_events(job_id);
+CREATE INDEX IF NOT EXISTS idx_geofence_driver ON geofence_events(driver_id);
+CREATE INDEX IF NOT EXISTS idx_geofence_triggered ON geofence_events(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_geofence_event_type ON geofence_events(event_type);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE geofence_events;
+ALTER TABLE geofence_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Dispatchers view geofence events" ON geofence_events FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role IN ('admin', 'dispatcher')));
+CREATE POLICY "Drivers view own geofence events" ON geofence_events FOR SELECT USING (driver_id IN (SELECT id FROM drivers WHERE user_id = auth.uid()));
+CREATE POLICY "System insert geofence events" ON geofence_events FOR INSERT WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS geofence_config (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE UNIQUE,
+  pickup_radius_meters INTEGER NOT NULL DEFAULT 200 CHECK (pickup_radius_meters >= 50 AND pickup_radius_meters <= 500),
+  delivery_radius_meters INTEGER NOT NULL DEFAULT 200 CHECK (delivery_radius_meters >= 50 AND delivery_radius_meters <= 500),
+  min_gps_accuracy_meters INTEGER NOT NULL DEFAULT 30,
+  auto_advance_pickup BOOLEAN DEFAULT true,
+  auto_advance_delivery BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE geofence_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "View geofence config" ON geofence_config FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role IN ('admin', 'dispatcher')));
+CREATE POLICY "Update geofence config" ON geofence_config FOR UPDATE USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role IN ('admin', 'dispatcher')));
+
+CREATE OR REPLACE FUNCTION is_within_geofence(driver_lat DOUBLE PRECISION, driver_lng DOUBLE PRECISION, target_lat DOUBLE PRECISION, target_lng DOUBLE PRECISION, radius_meters INTEGER) RETURNS BOOLEAN AS $$ DECLARE distance_m DOUBLE PRECISION; R CONSTANT DOUBLE PRECISION := 6371000; BEGIN distance_m := R * 2 * ASIN(SQRT(POW(SIN(RADIANS(target_lat - driver_lat) / 2), 2) + COS(RADIANS(driver_lat)) * COS(RADIANS(target_lat)) * POW(SIN(RADIANS(target_lng - driver_lng) / 2), 2))); RETURN distance_m <= radius_meters; END; $$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION handle_geofence_trigger() RETURNS TRIGGER AS $$ DECLARE v_job jobs%ROWTYPE; v_config geofence_config%ROWTYPE; BEGIN IF TG_TABLE_NAME = 'drivers' AND (NEW.location_lat IS DISTINCT FROM OLD.location_lat OR NEW.location_lng IS DISTINCT FROM OLD.location_lng) THEN FOR v_job IN SELECT * FROM jobs WHERE driver_id = NEW.id AND status IN ('assigned', 'in_progress') AND pickup_lat IS NOT NULL AND pickup_lng IS NOT NULL AND delivery_lat IS NOT NULL AND delivery_lng IS NOT NULL LOOP SELECT * INTO v_config FROM geofence_config WHERE job_id = v_job.id; IF NOT FOUND THEN v_config.pickup_radius_meters := 200; v_config.delivery_radius_meters := 200; v_config.min_gps_accuracy_meters := 30; v_config.auto_advance_pickup := true; v_config.auto_advance_delivery := false; END IF; IF (NEW.gps_accuracy > v_config.min_gps_accuracy_meters) THEN CONTINUE; END IF; IF is_within_geofence(NEW.location_lat, NEW.location_lng, v_job.pickup_lat, v_job.pickup_lng, v_config.pickup_radius_meters) AND v_job.status = 'assigned' THEN INSERT INTO geofence_events (job_id, driver_id, event_type, location_lat, location_lng, gps_accuracy, status_before, status_after) VALUES (v_job.id, NEW.id, 'pickup_arrival', NEW.location_lat, NEW.location_lng, NEW.gps_accuracy, v_job.status, 'in_progress') ON CONFLICT DO NOTHING; IF v_config.auto_advance_pickup THEN UPDATE jobs SET status = 'in_progress', updated_at = NOW() WHERE id = v_job.id; END IF; END IF; IF is_within_geofence(NEW.location_lat, NEW.location_lng, v_job.delivery_lat, v_job.delivery_lng, v_config.delivery_radius_meters) AND v_job.status = 'in_progress' THEN INSERT INTO geofence_events (job_id, driver_id, event_type, location_lat, location_lng, gps_accuracy, status_before, status_after) VALUES (v_job.id, NEW.id, 'delivery_arrival', NEW.location_lat, NEW.location_lng, NEW.gps_accuracy, v_job.status, 'completed') ON CONFLICT DO NOTHING; IF v_config.auto_advance_delivery THEN UPDATE jobs SET status = 'completed', updated_at = NOW() WHERE id = v_job.id; END IF; END IF; END LOOP; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS geofence_trigger ON drivers;
+CREATE TRIGGER geofence_trigger AFTER UPDATE ON drivers FOR EACH ROW EXECUTE FUNCTION handle_geofence_trigger();
+```
+
+**Then click the "Run" button (green button, bottom right)**
+
+Wait for: ✅ "Query completed successfully"
+
+---
+
+### Step 3: Click "+ New" and Deploy Migration 006
+
+See **SUPABASE_DEPLOYMENT_GUIDE.md** for Migration 006 SQL
+
+(Same process: Copy → Paste → Run)
+
+---
+
+### Step 4: Click "+ New" and Deploy Migration 007
+
+See **SUPABASE_DEPLOYMENT_GUIDE.md** for Migration 007 SQL
+
+(Same process: Copy → Paste → Run)
+
+---
+
+### Step 5: Click "+ New" and Deploy Migration 008
+
+See **SUPABASE_DEPLOYMENT_GUIDE.md** for Migration 008 SQL
+
+(Same process: Copy → Paste → Run)
+
+---
+
+## ✅ Verify Deployment
+
+After all 4 migrations run successfully:
+
+1. Go to **Supabase Studio** (left sidebar)
+2. Click **"Tables"**
+3. You should see these NEW tables:
+   - ✅ geofence_events
+   - ✅ geofence_config
+   - ✅ pod_photos
+   - ✅ pod_signatures
+   - ✅ eta_history
+   - ✅ permissions
+   - ✅ role_permissions
+   - ✅ audit_log
+
+---
+
+## 🎉 Done!
+
+All migrations deployed. Your database is now ready with:
+- Event-driven geofencing
+- Digital POD system
+- Real-time ETA tracking
+- RBAC permission system
+
+---
+
+## 📞 Troubleshooting
+
+### Error: "Foreign key constraint failed"
+**Solution:** Make sure migrations run in order (005 → 006 → 007 → 008)
+
+### Error: "Table already exists"
+**Solution:** Safe to ignore. The `IF NOT EXISTS` clause handles this.
+
+### Error: "Unknown type user_role"
+**Solution:** This type should exist from migration 001_initial_schema.sql
+
+---
+
+**That's it! Your Movido database is now production-ready! 🚀**
