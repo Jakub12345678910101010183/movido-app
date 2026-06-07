@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Link, useLocation } from "wouter"
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   Check, 
   Globe, 
@@ -101,6 +102,7 @@ export default function Pricing() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  const { session } = useAuth();
 
   // Stripe Checkout — redirects to Stripe-hosted payment page
   const handleCheckout = async (plan: typeof plans[0]) => {
@@ -110,8 +112,7 @@ export default function Pricing() {
     }
 
     // Require authentication before checkout
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+        if (!session) {
       setLocation("/login?redirect=/pricing");
       return;
     }
