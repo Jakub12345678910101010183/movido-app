@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   Check, 
   Globe, 
-  Zap, 
+  Zap,
   Building2,
   Calculator,
   TrendingUp,
@@ -117,7 +117,10 @@ export default function Pricing() {
     }
 
     const priceId = isAnnual ? plan.stripePriceAnnual : plan.stripePriceMonthly;
-    if (!priceId) return;
+    if (!priceId) {
+        setLocation('/register?plan=' + plan.name.toLowerCase());
+        return;
+      }
 
     setLoadingPlan(plan.name);
 
