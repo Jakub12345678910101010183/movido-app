@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { TomTomMap, tomtomGeocode, tomtomCalculateRoute, type MapMarker, type MapRoute } from "@/components/TomTomMap";
 import { useJobs } from "@/hooks/useSupabaseData";
+
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { toast } from "sonner";
 
 // ============================================
@@ -89,6 +91,7 @@ const UK_CAZ_ZONES = [
 
 // Haversine distance in metres
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const { settings } = useAppSettings();
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -280,9 +283,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
 
       if (routeResult) {
         const distanceSaved = Math.max(0, straightDist - routeResult.distance);
-        const UK_DIESEL_PRICE_PER_LITRE = 1.85; // Current UK pump price (June 2026)
-            const HGV_LITRES_PER_MILE = 0.57; // ~8 MPG typical 44t HGV
-            const fuelSaved = (distanceSaved / 1609.34) * HGV_LITRES_PER_MILE * UK_DIESEL_PRICE_PER_LITRE;
+        const fuelSaved = (distanceSaved / 1609.34) * settings.hgv_litres_per_mile * settings.diesel_price_per_litre;
 
         setOptimized({
           sequence, totalDistance: routeResult.distance, totalDuration: routeResult.duration,
