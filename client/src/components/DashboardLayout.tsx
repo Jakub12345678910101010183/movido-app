@@ -3,11 +3,12 @@
  * Bloomberg/Fintech style with icon-based navigation
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { AIDispatcher } from "@/components/AIDispatcher";
 import {
   LayoutDashboard,
   Briefcase,
@@ -30,6 +31,7 @@ import {
   ShieldAlert,
   ScanLine,
   ClipboardList,
+  Sparkles,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -59,6 +61,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [alertCount] = useState(3);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState(3);
+  const [pulse, setPulse] = useState(true);
+
+  // Stop pulsing after user opens the panel once
+  useEffect(() => {
+    if (aiOpen) setPulse(false);
+  }, [aiOpen]);
 
   // Realtime toast notifications for all dispatch events
   useRealtimeNotifications(true);
@@ -100,7 +110,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Navigation */}
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location === item.path || 
+            const isActive =
+              location === item.path ||
               (item.path !== "/dashboard" && location.startsWith(item.path));
             const Icon = item.icon;
 
@@ -188,6 +199,105 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <span className="text-xs text-muted-foreground font-mono">
               {new Date().toLocaleTimeString("en-GB")} GMT
             </span>
+
+            {/* ── AI PLANER BUTTON ── */}
+            <button
+              onClick={() => setAiOpen(true)}
+              className="ai-planer-btn"
+              style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "7px 14px",
+                background:
+                  "linear-gradient(135deg, #0f0f18 0%, #1a1a2e 50%, #16213e 100%)",
+                border: "1px solid rgba(99,102,241,0.45)",
+                borderRadius: "10px",
+                color: "#fff",
+                fontSize: "13px",
+                fontWeight: 600,
+                letterSpacing: "0.2px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+                fontFamily: "inherit",
+                animation: pulse ? "ai-btn-glow 2.8s ease-in-out infinite" : "none",
+                boxShadow: "0 0 0 0 rgba(99,102,241,0.45), 0 2px 14px rgba(99,102,241,0.2)",
+              }}
+              onMouseEnter={(e) => {
+                const el = e.currentTarget;
+                el.style.transform = "translateY(-1px)";
+                el.style.boxShadow = "0 6px 28px rgba(99,102,241,0.5)";
+                el.style.borderColor = "rgba(99,102,241,0.85)";
+                el.style.animation = "none";
+              }}
+              onMouseLeave={(e) => {
+                const el = e.currentTarget;
+                el.style.transform = "translateY(0)";
+                el.style.boxShadow = "0 0 0 0 rgba(99,102,241,0.45), 0 2px 14px rgba(99,102,241,0.2)";
+                el.style.borderColor = "rgba(99,102,241,0.45)";
+                el.style.animation = pulse
+                  ? "ai-btn-glow 2.8s ease-in-out infinite"
+                  : "none";
+              }}
+            >
+              {/* gradient overlay */}
+              <span
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "10px",
+                  background:
+                    "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.06))",
+                  pointerEvents: "none",
+                }}
+              />
+              {/* icon */}
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: "6px",
+                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                  boxShadow: "0 0 10px rgba(99,102,241,0.6)",
+                  flexShrink: 0,
+                  position: "relative",
+                  zIndex: 1,
+                }}
+              >
+                <Sparkles className="w-3 h-3 text-white" />
+              </span>
+              <span style={{ position: "relative", zIndex: 1 }}>AI Planner</span>
+              {/* badge */}
+              {aiSuggestions > 0 && (
+                <span
+                  style={{
+                    position: "relative",
+                    zIndex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: "18px",
+                    height: "18px",
+                    padding: "0 4px",
+                    background: "#ef4444",
+                    borderRadius: "9px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    color: "#fff",
+                    lineHeight: 1,
+                  }}
+                >
+                  {aiSuggestions}
+                </span>
+              )}
+            </button>
+
+            {/* Bell */}
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="w-4 h-4" />
               {alertCount > 0 && (
@@ -202,6 +312,29 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Page content */}
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
+
+      {/* AI Dispatcher Panel */}
+      <AIDispatcher
+        open={aiOpen}
+        onClose={() => {
+          setAiOpen(false);
+          setAiSuggestions(0);
+        }}
+      />
+
+      {/* Keyframe injection */}
+      <style>{`
+        @keyframes ai-btn-glow {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(99,102,241,0.45),
+                        0 2px 14px rgba(99,102,241,0.18);
+          }
+          50% {
+            box-shadow: 0 0 0 5px rgba(99,102,241,0),
+                        0 2px 22px rgba(99,102,241,0.42);
+          }
+        }
+      `}</style>
     </div>
   );
 }
