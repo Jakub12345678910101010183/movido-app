@@ -156,7 +156,7 @@ export default function Pricing() {
   // ROI Calculator state
   const [fleetSize, setFleetSize] = useState(10);
   const [avgMilesPerDay, setAvgMilesPerDay] = useState(150);
-  const [fuelCostPerMile, setFuelCostPerMile] = useState(0.45);
+  const [fuelCostPerMile, setFuelCostPerMile] = useState(0.85);
   const [dispatchHoursPerDay, setDispatchHoursPerDay] = useState(4);
   const [hourlyDispatchCost, setHourlyDispatchCost] = useState(18);
 
@@ -296,7 +296,7 @@ export default function Pricing() {
                   value={[fleetSize]}
                   onValueChange={(v) => setFleetSize(v[0])}
                   min={1}
-                  max={100}
+                  max=1500}
                   step={1}
                   className="py-2"
                 />
@@ -325,8 +325,8 @@ export default function Pricing() {
                 <Slider
                   value={[fuelCostPerMile * 100]}
                   onValueChange={(v) => setFuelCostPerMile(v[0] / 100)}
-                  min={20}
-                  max={100}
+                  min={30}
+                  max={150}
                   step={5}
                   className="py-2"
                 />
