@@ -23,7 +23,7 @@ import {
   LogOut,
   Shield,
   Loader2,
-  Brain,
+  Brain, Fuel,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthContext } from "@/contexts/AuthContext";
@@ -58,6 +58,7 @@ export default function Settings() {
   });
 
   const [darkMode, setDarkMode] = useState(true);
+  const [dieselPrice, setDieselPrice] = useState('1.85');
 
   const saveSettings = () => {
     localStorage.setItem('movido-distance-unit', useMiles ? 'miles' : 'km');
@@ -65,6 +66,29 @@ export default function Settings() {
     localStorage.setItem('movido-show-caz', showCAZ.toString());
     localStorage.setItem('movido-notifications', notifications.toString());
     toast.success('Settings saved successfully');
+  };
+
+  useEffect(() => {
+    async function loadDieselPrice() {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'diesel_price_per_litre')
+        .single();
+      if (data) setDieselPrice(data.value);
+    }
+    loadDieselPrice();
+  }, []);
+
+  const saveDieselPrice = async () => {
+    await supabase
+      .from('app_settings')
+      .upsert({
+        key: 'diesel_price_per_litre',
+        value: dieselPrice,
+        updated_at: new Date().toISOString()
+      });
+    toast(`Diesel price updated to £${dieselPrice}/L`);
   };
 
   return (
@@ -351,6 +375,45 @@ export default function Settings() {
             </div>
           </section>
 
+          {/* Fuel Prices */}
+          <section className="card-terminal p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                <Fuel className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Fuel Prices</h2>
+                <p className="text-sm text-gray-500">Update diesel price for route cost calculations</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Diesel Price per Litre (£)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.50"
+                    max="5.00"
+                    value={dieselPrice}
+                    onChange={(e) => setDieselPrice(e.target.value)}
+                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="text-sm text-gray-500">
+                    per litre · HGV est. £{(parseFloat(dieselPrice || '1.85') * 0.57).toFixed(2)}/mile
+                  </span>
+                </div>
+                <button
+                  onClick={saveDieselPrice}
+                  className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Save Fuel Price
+                </button>
+              </div>
+            </div>
+          </section>
           {/* AI Route Planning */}
           <section className="card-terminal p-6 border border-cyan-500/30 bg-cyan-500/5">
             <div className="flex items-center gap-3 mb-6">
