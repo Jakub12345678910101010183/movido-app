@@ -280,7 +280,9 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
 
       if (routeResult) {
         const distanceSaved = Math.max(0, straightDist - routeResult.distance);
-        const fuelSaved = (distanceSaved / 1609.34) * 0.35 * 1.5; // ~0.35 gal/mi × £1.50/L
+        const UK_DIESEL_PRICE_PER_LITRE = 1.48; // Current UK pump price (June 2026)
+            const HGV_LITRES_PER_MILE = 0.57; // ~8 MPG typical 44t HGV
+            const fuelSaved = (distanceSaved / 1609.34) * HGV_LITRES_PER_MILE * UK_DIESEL_PRICE_PER_LITRE;
 
         setOptimized({
           sequence, totalDistance: routeResult.distance, totalDuration: routeResult.duration,
