@@ -4,7 +4,7 @@
  * Features: HGV routing, satellite view, low bridge/CAZ layers, driver markers
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 // TomTom types
@@ -81,6 +81,7 @@ export interface MapRoute {
 
 interface TomTomMapProps {
   className?: string;
+  style?: React.CSSProperties;
   initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
   markers?: MapMarker[];
@@ -184,6 +185,7 @@ function createMarkerElement(marker: MapMarker): HTMLElement {
  */
 export function TomTomMap({
   className,
+  style,
   initialCenter = { lat: 52.2405, lng: -0.9027 }, // Northampton, UK
   initialZoom = 7,
   markers = [],
@@ -233,6 +235,12 @@ export function TomTomMap({
       try {
         mapRef.current = tt.map(mapOptions);
 
+        // Force map to re-read container dimensions after browser layout finishes
+        // (needed when container size is determined by flex/CSS rather than explicit px)
+        requestAnimationFrame(() => {
+          if (mapRef.current) mapRef.current.resize();
+        });
+
         // Add navigation controls
         mapRef.current.addControl(new tt.NavigationControl(), "top-right");
         mapRef.current.addControl(new tt.FullscreenControl(), "top-right");
@@ -263,6 +271,9 @@ export function TomTomMap({
           center: [initialCenter.lng, initialCenter.lat],
           zoom: initialZoom,
           language: "en-GB",
+        });
+        requestAnimationFrame(() => {
+          if (mapRef.current) mapRef.current.resize();
         });
         mapRef.current.addControl(new tt.NavigationControl(), "top-right");
         if (onMapReady) {
@@ -396,7 +407,8 @@ export function TomTomMap({
   return (
     <div
       ref={containerRef}
-      className={cn("w-full h-[500px] rounded-lg overflow-hidden", className)}
+      className={cn("w-full h-[500px]", className)}
+      style={style}
     />
   );
 }

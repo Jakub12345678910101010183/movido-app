@@ -667,10 +667,9 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
         </div>
 
         {/* ── RIGHT PANEL — TomTom Map (full height) ── */}
-        <div style={{ flex: 1, position: "relative" }}>
+        <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
           <TomTomMap
-            className="w-full h-full"
-            style={{ position: "absolute", inset: 0 }}
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
             initialCenter={{ lat: 52.5, lng: -1.5 }}
             initialZoom={6}
             markers={mapMarkers}
