@@ -12,6 +12,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,10 +24,12 @@ import {
   Route,
   AlertTriangle,
   Zap,
+  Map,
 } from "lucide-react";
 import { useJobs, useDrivers, useVehicles } from "@/hooks/useSupabaseData";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 
 interface AIMessage {
   id: string;
@@ -59,8 +62,10 @@ export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [showRoutePlanner, setShowRoutePlanner] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [, navigate] = useLocation();
 
   const { jobs, refetch: refetchJobs } = useJobs();
   const { drivers } = useDrivers();
@@ -663,6 +668,82 @@ export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
           </div>
         </div>
 
+        {/* ── Plan New Route CTA ── */}
+        <div
+          style={{
+            padding: "10px 20px",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            flexShrink: 0,
+          }}
+        >
+          <button
+            onClick={() => setShowRoutePlanner(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "11px",
+              width: "100%",
+              padding: "11px 14px",
+              background: "linear-gradient(135deg, rgba(6,182,212,0.12), rgba(99,102,241,0.12))",
+              border: "1px solid rgba(6,182,212,0.35)",
+              borderRadius: "10px",
+              color: "#fff",
+              cursor: "pointer",
+              textAlign: "left",
+              fontFamily: "inherit",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "linear-gradient(135deg, rgba(6,182,212,0.22), rgba(99,102,241,0.22))";
+              e.currentTarget.style.borderColor = "rgba(6,182,212,0.6)";
+              e.currentTarget.style.boxShadow = "0 0 20px rgba(6,182,212,0.15)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "linear-gradient(135deg, rgba(6,182,212,0.12), rgba(99,102,241,0.12))";
+              e.currentTarget.style.borderColor = "rgba(6,182,212,0.35)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <div
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, #06b6d4, #6366f1)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                boxShadow: "0 0 12px rgba(6,182,212,0.4)",
+              }}
+            >
+              <Map className="w-4 h-4 text-white" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>
+                Plan New Route
+              </div>
+              <div style={{ fontSize: "11px", color: "rgba(6,182,212,0.85)", marginTop: "1px" }}>
+                TomTom HGV routing · AI optimisation · Live map
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: "10px",
+                padding: "3px 8px",
+                borderRadius: "20px",
+                background: "rgba(6,182,212,0.15)",
+                border: "1px solid rgba(6,182,212,0.3)",
+                color: "#22d3ee",
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              Open ↗
+            </span>
+          </button>
+        </div>
+
         {/* ── Live Suggestions ── */}
         {suggestions.length > 0 && (
           <div
@@ -1093,6 +1174,13 @@ export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
           40%          { transform: scale(1.4); opacity: 1; }
         }
       `}</style>
+
+      {/* AI Route Planner — opens on top of the dispatcher panel */}
+      <AIRoutePlanner
+        open={showRoutePlanner}
+        onClose={() => setShowRoutePlanner(false)}
+        onSaveJob={() => { setShowRoutePlanner(false); }}
+      />
     </>
   );
 }

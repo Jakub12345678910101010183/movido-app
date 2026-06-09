@@ -91,7 +91,6 @@ const UK_CAZ_ZONES = [
 
 // Haversine distance in metres
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const { settings } = useAppSettings();
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -170,6 +169,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const { create: createJob, generateReference } = useJobs();
+  const { settings } = useAppSettings();
 
   // ============================================
   // Map markers & routes for TomTomMap
