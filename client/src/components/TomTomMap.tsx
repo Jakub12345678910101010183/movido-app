@@ -466,12 +466,12 @@ export async function tomtomCalculateRoute(
     const locations = waypoints.map(w => `${w.lat},${w.lng}`).join(":");
     let url = `https://api.tomtom.com/routing/1/calculateRoute/${locations}/json?key=${TOMTOM_API_KEY}&routeType=fastest&traffic=${options?.traffic !== false}`;
 
-    // HGV-specific parameters
+    // HGV-specific parameters (TomTom API uses vehicleHeight in metres, vehicleWeight in kg)
     if (options?.travelMode === "truck" || options?.vehicleHeight || options?.vehicleWeight) {
       url += `&travelMode=truck`;
-      if (options?.vehicleHeight) url += `&vehicleHeightInMeters=${options.vehicleHeight}`;
-      if (options?.vehicleWeight) url += `&vehicleWeightInKg=${options.vehicleWeight}`;
-      if (options?.vehicleWidth) url += `&vehicleWidthInMeters=${options.vehicleWidth}`;
+      if (options?.vehicleHeight) url += `&vehicleHeight=${options.vehicleHeight}`;
+      if (options?.vehicleWeight) url += `&vehicleWeight=${options.vehicleWeight}`;
+      if (options?.vehicleWidth) url += `&vehicleWidth=${options.vehicleWidth}`;
     }
 
     if (options?.avoid?.length) {
@@ -534,8 +534,8 @@ export async function tomtomDistanceMatrix(
 
     if (options?.travelMode === "truck") {
       url += `&travelMode=truck`;
-      if (options.vehicleHeight) url += `&vehicleHeightInMeters=${options.vehicleHeight}`;
-      if (options.vehicleWeight) url += `&vehicleWeightInKg=${options.vehicleWeight}`;
+      if (options.vehicleHeight) url += `&vehicleHeight=${options.vehicleHeight}`;
+      if (options.vehicleWeight) url += `&vehicleWeight=${options.vehicleWeight}`;
     }
 
     const res = await fetch(url, {
