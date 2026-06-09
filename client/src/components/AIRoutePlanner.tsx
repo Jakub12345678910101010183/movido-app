@@ -16,11 +16,10 @@ import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Brain, MapPin, Plus, Trash2, Play, Loader2, AlertTriangle, Save,
-  Smartphone, Route, Navigation, Zap, GripVertical,
+  Smartphone, Route, Navigation, Zap, GripVertical, X, ChevronRight,
 } from "lucide-react";
 import { TomTomMap, tomtomGeocode, tomtomCalculateRoute, type MapMarker, type MapRoute } from "@/components/TomTomMap";
 import { useJobs } from "@/hooks/useSupabaseData";
@@ -369,174 +368,402 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
   // Render
   // ============================================
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[90vh] p-0 bg-background border-border">
-        <div className="flex h-full">
-          {/* LEFT PANEL */}
-          <div className="w-96 border-r border-border flex flex-col">
-            <DialogHeader className="p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Brain className="w-5 h-5 text-primary" /></div>
-                <div><DialogTitle>AI Route Planner</DialogTitle><p className="text-xs text-muted-foreground">TomTom HGV routing with AI optimization</p></div>
+    <>
+      {/* Full-screen overlay */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 60,
+          display: "flex",
+          background: "#07070f",
+          animation: "rp-in 0.28s cubic-bezier(0.16,1,0.3,1)",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        }}
+      >
+        {/* ── LEFT PANEL ── */}
+        <div
+          style={{
+            width: "380px",
+            flexShrink: 0,
+            borderRight: "1px solid rgba(255,255,255,0.07)",
+            background: "linear-gradient(180deg, #09090f, #0c0c18)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid rgba(255,255,255,0.07)",
+              background: "linear-gradient(180deg, rgba(6,182,212,0.07), transparent)",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                width: "38px", height: "38px", borderRadius: "11px",
+                background: "linear-gradient(135deg, #06b6d4, #6366f1)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 0 18px rgba(6,182,212,0.4)", flexShrink: 0,
+              }}
+            >
+              <Brain className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>AI Route Planner</div>
+              <div style={{ fontSize: "11.5px", color: "rgba(6,182,212,0.8)", marginTop: "1px" }}>
+                TomTom HGV · AI optimisation · Live map
               </div>
-            </DialogHeader>
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                padding: "6px", background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px",
+                color: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
-            {/* Search */}
-            <div className="p-4 border-b border-border space-y-3">
-              <div className="flex gap-2">
-                <Input placeholder="Enter postcode or address..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSearch()} className="flex-1" />
-                <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()} size="icon">
-                  {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                </Button>
-              </div>
-              <Select value={waypointType} onValueChange={(v) => setWaypointType(v as any)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="pickup">Pickup Point</SelectItem><SelectItem value="delivery">Delivery Point</SelectItem><SelectItem value="waypoint">Waypoint</SelectItem></SelectContent>
-              </Select>
+          {/* Search */}
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+              <input
+                placeholder="Enter postcode or address..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                style={{
+                  flex: 1, padding: "9px 12px", background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
+                  color: "#fff", fontSize: "13px", outline: "none", fontFamily: "inherit",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(6,182,212,0.5)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
+              />
+              <button
+                onClick={handleSearch}
+                disabled={isSearching || !searchQuery.trim()}
+                style={{
+                  width: "36px", height: "36px", flexShrink: 0, borderRadius: "8px",
+                  background: searchQuery.trim() ? "linear-gradient(135deg,#06b6d4,#6366f1)" : "rgba(255,255,255,0.06)",
+                  border: "none", color: "#fff", cursor: searchQuery.trim() ? "pointer" : "default",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              </button>
+            </div>
+            <Select value={waypointType} onValueChange={(v) => setWaypointType(v as any)}>
+              <SelectTrigger className="w-full h-8 text-xs bg-transparent border-white/10 text-white/70"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pickup">🟢 Pickup Point</SelectItem>
+                <SelectItem value="delivery">🟡 Delivery Point</SelectItem>
+                <SelectItem value="waypoint">🔵 Waypoint</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Waypoints list */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", scrollbarWidth: "thin", scrollbarColor: "rgba(6,182,212,0.2) transparent" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "1px" }}>
+                Waypoints ({waypoints.length})
+              </span>
+              {waypoints.length > 0 && (
+                <button onClick={() => { setWaypoints([]); setOptimized(null); }}
+                  style={{ fontSize: "11px", color: "rgba(255,100,100,0.7)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                  Clear all
+                </button>
+              )}
             </div>
 
-            {/* Waypoints List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Waypoints ({waypoints.length})</h3>
-                {waypoints.length > 0 && <Button variant="ghost" size="sm" onClick={() => { setWaypoints([]); setOptimized(null); }}>Clear All</Button>}
+            {waypoints.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,0.2)" }}>
+                <MapPin style={{ width: 32, height: 32, margin: "0 auto 8px", opacity: 0.3 }} />
+                <p style={{ fontSize: "13px" }}>No waypoints yet</p>
+                <p style={{ fontSize: "11px", marginTop: "4px" }}>Search a postcode or address above</p>
               </div>
-
-              {waypoints.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground"><MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">No waypoints added yet</p><p className="text-xs">Search for a postcode or address above</p></div>
-              ) : (
-                <div className="space-y-2">
-                  {waypoints.length > 1 && <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1"><GripVertical className="w-3 h-3" /> Drag to reorder</p>}
-                  {waypoints.map((wp, index) => {
-                    const displayIdx = optimized ? optimized.sequence.indexOf(index) + 1 : index + 1;
-                    return (
-                      <div key={wp.id} draggable
-                        onDragStart={() => setDraggedIndex(index)}
-                        onDragOver={(e) => { e.preventDefault(); if (draggedIndex !== index) setDragOverIndex(index); }}
-                        onDragLeave={() => setDragOverIndex(null)}
-                        onDrop={(e) => handleDrop(e, index)}
-                        onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null); }}
-                        className={`flex items-center gap-2 p-3 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
-                          draggedIndex === index ? "opacity-50 border-primary bg-primary/10" :
-                          dragOverIndex === index ? "border-primary border-dashed bg-primary/5" :
-                          optimized ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30"
-                        }`}
-                      >
-                        <GripVertical className="w-4 h-4 text-muted-foreground" />
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold ${
-                          wp.type === "pickup" ? "bg-green-500 text-green-950" :
-                          wp.type === "delivery" ? "bg-amber-500 text-amber-950" : "bg-primary text-primary-foreground"
-                        }`}>{displayIdx}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{wp.address}</p>
-                          <p className="text-xs text-muted-foreground">{wp.type}{wp.postcode && ` • ${wp.postcode}`}</p>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setWaypoints((p) => p.filter((w) => w.id !== wp.id)); setOptimized(null); }}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {waypoints.map((wp, index) => {
+                  const displayIdx = optimized ? optimized.sequence.indexOf(index) + 1 : index + 1;
+                  const typeColor = wp.type === "pickup" ? "#22c55e" : wp.type === "delivery" ? "#f59e0b" : "#6366f1";
+                  return (
+                    <div
+                      key={wp.id} draggable
+                      onDragStart={() => setDraggedIndex(index)}
+                      onDragOver={(e) => { e.preventDefault(); if (draggedIndex !== index) setDragOverIndex(index); }}
+                      onDragLeave={() => setDragOverIndex(null)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "8px", padding: "9px 11px",
+                        background: draggedIndex === index ? "rgba(99,102,241,0.12)" : dragOverIndex === index ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${dragOverIndex === index ? "rgba(6,182,212,0.35)" : "rgba(255,255,255,0.07)"}`,
+                        borderRadius: "9px", cursor: "grab", transition: "all 0.15s",
+                        opacity: draggedIndex === index ? 0.5 : 1,
+                      }}
+                    >
+                      <GripVertical style={{ width: 14, height: 14, color: "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+                      <div style={{
+                        width: "24px", height: "24px", borderRadius: "50%", flexShrink: 0,
+                        background: typeColor, display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "11px", fontWeight: 700, color: "#000",
+                      }}>{displayIdx}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "12.5px", color: "#fff", fontWeight: 500, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{wp.address}</p>
+                        <p style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.3)", margin: "1px 0 0", textTransform: "capitalize" }}>{wp.type}{wp.postcode ? ` · ${wp.postcode}` : ""}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* HGV Constraints */}
-            <div className="p-4 border-t border-border space-y-3">
-              <h4 className="text-xs font-semibold text-muted-foreground">HGV CONSTRAINTS</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label className="text-xs">Height (m)</Label><Input type="number" step="0.1" value={vehicleHeight} onChange={(e) => setVehicleHeight(parseFloat(e.target.value) || 4.95)} className="h-8" /></div>
-                <div><Label className="text-xs">Weight (t)</Label><Input type="number" step="1" value={vehicleWeight} onChange={(e) => setVehicleWeight(parseFloat(e.target.value) || 44)} className="h-8" /></div>
-              </div>
-            </div>
-
-            {/* Optimization Results */}
-            {optimized && (
-              <div className="p-4 border-t border-border bg-green-500/10">
-                <div className="flex items-center gap-2 mb-3"><Zap className="w-4 h-4 text-green-500" /><span className="text-sm font-semibold text-green-500">Route Optimized</span></div>
-                <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                  <div><p className="text-xs text-muted-foreground">Distance</p><p className="font-mono font-bold text-green-500">{fmt.dist(optimized.totalDistance)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Duration</p><p className="font-mono font-bold text-green-500">{fmt.time(optimized.totalDuration)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Fuel Saved</p><p className="font-mono font-bold text-green-500">£{optimized.fuelSaved.toFixed(0)}</p></div>
-                </div>
-                <div className="mb-3"><Label className="text-xs">Customer Name</Label><Input placeholder="e.g., Tesco Distribution" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-8 mt-1" /></div>
-              </div>
-            )}
-
-            {/* Alerts */}
-            {optimized?.alerts && optimized.alerts.length > 0 && (
-              <div className="p-4 border-t border-border bg-amber-500/10">
-                <div className="flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-sm font-semibold text-amber-500">Route Alerts ({optimized.alerts.length})</span></div>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {optimized.alerts.map((a, i) => (
-                    <div key={i} className={`text-xs p-2 rounded ${a.severity === "critical" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"}`}>
-                      <strong>{a.location}</strong><br />{a.details}
+                      <button
+                        onClick={() => { setWaypoints((p) => p.filter((w) => w.id !== wp.id)); setOptimized(null); }}
+                        style={{ background: "none", border: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", padding: "2px", display: "flex" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,100,100,0.9)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,100,100,0.5)")}
+                      >
+                        <Trash2 style={{ width: 13, height: 13 }} />
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             )}
+          </div>
 
-            {/* Actions */}
-            <div className="p-4 border-t border-border space-y-2">
-              {!optimized ? (
-                <Button className="w-full" onClick={handleOptimize} disabled={isOptimizing || waypoints.length < 2}>
-                  {isOptimizing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Optimizing...</> : <><Play className="w-4 h-4 mr-2" />Optimize Route</>}
-                </Button>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={() => setOptimized(null)}>Reset</Button>
-                    <Button variant="outline" className="flex-1" onClick={() => toast.success("Route exported to Movido Driver via TomTom")}><Smartphone className="w-4 h-4 mr-2" />Export</Button>
-                  </div>
-                  <Button className="w-full" onClick={handleSaveJob} disabled={isSaving || !customerName.trim()}>
-                    {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Confirm & Save Job</>}
-                  </Button>
-                </>
-              )}
+          {/* HGV Constraints */}
+          <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px" }}>HGV Constraints</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <div>
+                <Label style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Height (m)</Label>
+                <Input type="number" step="0.1" value={vehicleHeight} onChange={(e) => setVehicleHeight(parseFloat(e.target.value) || 4.95)}
+                  className="h-8 mt-1 bg-white/5 border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <Label style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Weight (t)</Label>
+                <Input type="number" step="1" value={vehicleWeight} onChange={(e) => setVehicleWeight(parseFloat(e.target.value) || 44)}
+                  className="h-8 mt-1 bg-white/5 border-white/10 text-white text-sm" />
+              </div>
             </div>
           </div>
 
-          {/* RIGHT PANEL — TomTom Map */}
-          <div className="flex-1 relative">
-            <TomTomMap
-              className="w-full h-full"
-              initialCenter={{ lat: 52.5, lng: -1.5 }}
-              initialZoom={6}
-              markers={mapMarkers}
-              routes={mapRoutes}
-              mapStyle="night"
-            />
+          {/* Results */}
+          {optimized && (
+            <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(34,197,94,0.2)", background: "rgba(34,197,94,0.05)", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                <Zap style={{ width: 14, height: 14, color: "#22c55e" }} />
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "#22c55e" }}>Route Optimized!</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", textAlign: "center", marginBottom: "10px" }}>
+                {[
+                  { label: "Distance", val: fmt.dist(optimized.totalDistance) },
+                  { label: "Duration", val: fmt.time(optimized.totalDuration) },
+                  { label: "Fuel saved", val: `£${optimized.fuelSaved.toFixed(0)}` },
+                ].map((s) => (
+                  <div key={s.label} style={{ background: "rgba(34,197,94,0.08)", borderRadius: "7px", padding: "6px 4px" }}>
+                    <p style={{ fontSize: "9.5px", color: "rgba(255,255,255,0.35)", marginBottom: "2px" }}>{s.label}</p>
+                    <p style={{ fontSize: "13px", fontWeight: 700, color: "#22c55e", fontFamily: "monospace" }}>{s.val}</p>
+                  </div>
+                ))}
+              </div>
+              <input
+                placeholder="Customer name (e.g. Tesco Distribution)"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                style={{
+                  width: "100%", padding: "8px 10px", background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px",
+                  color: "#fff", fontSize: "12.5px", outline: "none", fontFamily: "inherit", boxSizing: "border-box",
+                }}
+              />
+            </div>
+          )}
 
-            {/* Legend */}
-            <div className="absolute top-4 right-4 bg-background/90 backdrop-blur-sm border border-border rounded-lg p-3">
-              <h4 className="text-xs font-semibold mb-2">Legend</h4>
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500" /><span className="text-muted-foreground">Pickup</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-amber-500" /><span className="text-muted-foreground">Delivery</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-primary" /><span className="text-muted-foreground">Waypoint</span></div>
-                <div className="flex items-center gap-2"><AlertTriangle className="w-3 h-3 text-red-500" /><span className="text-muted-foreground">Low Bridge</span></div>
-                <div className="flex items-center gap-2"><AlertTriangle className="w-3 h-3 text-amber-500" /><span className="text-muted-foreground">CAZ Zone</span></div>
+          {/* Alerts */}
+          {optimized?.alerts && optimized.alerts.length > 0 && (
+            <div style={{ padding: "10px 16px", borderTop: "1px solid rgba(245,158,11,0.2)", background: "rgba(245,158,11,0.05)", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "7px" }}>
+                <AlertTriangle style={{ width: 13, height: 13, color: "#f59e0b" }} />
+                <span style={{ fontSize: "11.5px", fontWeight: 600, color: "#f59e0b" }}>Route Alerts ({optimized.alerts.length})</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px", maxHeight: "100px", overflowY: "auto" }}>
+                {optimized.alerts.map((a, i) => (
+                  <div key={i} style={{
+                    fontSize: "11px", padding: "6px 8px", borderRadius: "6px",
+                    background: a.severity === "critical" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)",
+                    color: a.severity === "critical" ? "#f87171" : "#fbbf24",
+                    border: `1px solid ${a.severity === "critical" ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.2)"}`,
+                  }}>
+                    <strong>{a.location}</strong><br />{a.details}
+                  </div>
+                ))}
               </div>
             </div>
+          )}
 
-            {/* Route Info */}
-            {optimized && (
-              <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm border border-border rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2"><Route className="w-4 h-4 text-primary" /><span className="font-mono font-bold">{fmt.dist(optimized.totalDistance)}</span></div>
-                    <div className="flex items-center gap-2"><Navigation className="w-4 h-4 text-primary" /><span className="font-mono font-bold">{fmt.time(optimized.totalDuration)}</span></div>
-                    {optimized.distanceSaved > 0 && <div className="flex items-center gap-2 text-green-500"><Zap className="w-4 h-4" /><span className="font-mono font-bold">-{fmt.dist(optimized.distanceSaved)} saved</span></div>}
-                  </div>
-                  {optimized.alerts.length > 0 && <span className="flex items-center gap-1 text-amber-500 text-sm"><AlertTriangle className="w-4 h-4" />{optimized.alerts.length} alert(s)</span>}
+          {/* Action buttons */}
+          <div style={{ padding: "12px 16px 18px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+            {!optimized ? (
+              <button
+                onClick={handleOptimize}
+                disabled={isOptimizing || waypoints.length < 2}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: "9px", border: "none",
+                  background: waypoints.length >= 2 ? "linear-gradient(135deg,#06b6d4,#6366f1)" : "rgba(255,255,255,0.07)",
+                  color: waypoints.length >= 2 ? "#fff" : "rgba(255,255,255,0.25)",
+                  fontSize: "13px", fontWeight: 600, cursor: waypoints.length >= 2 ? "pointer" : "default",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
+                  fontFamily: "inherit", boxShadow: waypoints.length >= 2 ? "0 4px 18px rgba(6,182,212,0.35)" : "none",
+                  transition: "all 0.2s",
+                }}
+              >
+                {isOptimizing
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Optimizing route...</>
+                  : <><Play className="w-4 h-4" />Optimize Route</>}
+              </button>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={() => setOptimized(null)}
+                    style={{ flex: 1, padding: "9px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontSize: "12.5px", cursor: "pointer", fontFamily: "inherit" }}>
+                    Reset
+                  </button>
+                  <button onClick={() => toast.success("Route exported to Movido Driver via TomTom")}
+                    style={{ flex: 1, padding: "9px", borderRadius: "8px", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)", color: "#a5b4fc", fontSize: "12.5px", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+                    <Smartphone className="w-3.5 h-3.5" />Export
+                  </button>
                 </div>
-              </div>
+                <button
+                  onClick={handleSaveJob}
+                  disabled={isSaving || !customerName.trim()}
+                  style={{
+                    width: "100%", padding: "11px", borderRadius: "9px", border: "none",
+                    background: customerName.trim() ? "linear-gradient(135deg,#22c55e,#16a34a)" : "rgba(255,255,255,0.07)",
+                    color: customerName.trim() ? "#fff" : "rgba(255,255,255,0.25)",
+                    fontSize: "13px", fontWeight: 600, cursor: customerName.trim() ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
+                    fontFamily: "inherit", boxShadow: customerName.trim() ? "0 4px 18px rgba(34,197,94,0.3)" : "none",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving...</> : <><Save className="w-4 h-4" />Confirm & Save Job</>}
+                </button>
+              </>
             )}
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        {/* ── RIGHT PANEL — TomTom Map (full height) ── */}
+        <div style={{ flex: 1, position: "relative" }}>
+          <TomTomMap
+            className="w-full h-full"
+            style={{ position: "absolute", inset: 0 }}
+            initialCenter={{ lat: 52.5, lng: -1.5 }}
+            initialZoom={6}
+            markers={mapMarkers}
+            routes={mapRoutes}
+            mapStyle="night"
+          />
+
+          {/* Breadcrumb top-left */}
+          <div style={{
+            position: "absolute", top: 16, left: 16,
+            display: "flex", alignItems: "center", gap: "6px",
+            background: "rgba(7,7,15,0.85)", backdropFilter: "blur(8px)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
+            padding: "7px 12px", fontSize: "12px", color: "rgba(255,255,255,0.6)",
+          }}>
+            <span>Dispatch</span>
+            <ChevronRight style={{ width: 12, height: 12, opacity: 0.4 }} />
+            <span style={{ color: "#22d3ee" }}>AI Route Planner</span>
+          </div>
+
+          {/* Legend top-right */}
+          <div style={{
+            position: "absolute", top: 16, right: 16,
+            background: "rgba(7,7,15,0.85)", backdropFilter: "blur(8px)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+            padding: "10px 14px",
+          }}>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "7px" }}>Legend</p>
+            {[
+              { color: "#22c55e", label: "Pickup" },
+              { color: "#f59e0b", label: "Delivery" },
+              { color: "#6366f1", label: "Waypoint" },
+            ].map((l) => (
+              <div key={l.label} style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "5px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
+                {l.label}
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "5px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
+              <AlertTriangle style={{ width: 11, height: 11, color: "#ef4444", flexShrink: 0 }} />Low Bridge
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
+              <AlertTriangle style={{ width: 11, height: 11, color: "#f59e0b", flexShrink: 0 }} />CAZ Zone
+            </div>
+          </div>
+
+          {/* Route summary bar bottom */}
+          {optimized && (
+            <div style={{
+              position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+              background: "rgba(7,7,15,0.92)", backdropFilter: "blur(12px)",
+              border: "1px solid rgba(34,197,94,0.25)", borderRadius: "12px",
+              padding: "12px 24px", display: "flex", alignItems: "center", gap: "24px",
+              animation: "rp-in 0.3s ease",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                <Route style={{ width: 15, height: 15, color: "#22d3ee" }} />
+                <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#fff", fontSize: "14px" }}>{fmt.dist(optimized.totalDistance)}</span>
+              </div>
+              <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                <Navigation style={{ width: 15, height: 15, color: "#22d3ee" }} />
+                <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#fff", fontSize: "14px" }}>{fmt.time(optimized.totalDuration)}</span>
+              </div>
+              {optimized.distanceSaved > 100 && (
+                <>
+                  <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <Zap style={{ width: 15, height: 15, color: "#22c55e" }} />
+                    <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#22c55e", fontSize: "14px" }}>-{fmt.dist(optimized.distanceSaved)} saved</span>
+                  </div>
+                </>
+              )}
+              {optimized.alerts.length > 0 && (
+                <>
+                  <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#f59e0b", fontSize: "13px" }}>
+                    <AlertTriangle style={{ width: 14, height: 14 }} />
+                    {optimized.alerts.length} alert{optimized.alerts.length > 1 ? "s" : ""}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes rp-in {
+          from { opacity: 0; transform: scale(0.98); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </>
   );
 }

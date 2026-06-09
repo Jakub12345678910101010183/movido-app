@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 import { AIDispatcher } from "@/components/AIDispatcher";
+import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 import {
   LayoutDashboard,
   Briefcase,
@@ -62,6 +63,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [alertCount] = useState(3);
   const [aiOpen, setAiOpen] = useState(false);
+  const [routePlannerOpen, setRoutePlannerOpen] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState(3);
   const [pulse, setPulse] = useState(true);
 
@@ -289,6 +291,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           setAiOpen(false);
           setAiSuggestions(0);
         }}
+        onPlanRoute={() => {
+          setAiOpen(false);
+          setAiSuggestions(0);
+          setRoutePlannerOpen(true);
+        }}
+      />
+
+      {/* AI Route Planner — full screen, no overlap */}
+      <AIRoutePlanner
+        open={routePlannerOpen}
+        onClose={() => setRoutePlannerOpen(false)}
+        onSaveJob={() => setRoutePlannerOpen(false)}
       />
 
       {/* Keyframe injection */}

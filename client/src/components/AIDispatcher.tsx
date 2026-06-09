@@ -12,7 +12,6 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,7 +28,6 @@ import {
 import { useJobs, useDrivers, useVehicles } from "@/hooks/useSupabaseData";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 
 interface AIMessage {
   id: string;
@@ -56,16 +54,15 @@ interface AISuggestion {
 interface AIDispatcherProps {
   open: boolean;
   onClose: () => void;
+  onPlanRoute?: () => void;
 }
 
-export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
+export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [showRoutePlanner, setShowRoutePlanner] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [, navigate] = useLocation();
 
   const { jobs, refetch: refetchJobs } = useJobs();
   const { drivers } = useDrivers();
@@ -677,7 +674,7 @@ export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
           }}
         >
           <button
-            onClick={() => setShowRoutePlanner(true)}
+            onClick={() => onPlanRoute?.()}
             style={{
               display: "flex",
               alignItems: "center",
@@ -1175,12 +1172,6 @@ export function AIDispatcher({ open, onClose }: AIDispatcherProps) {
         }
       `}</style>
 
-      {/* AI Route Planner — opens on top of the dispatcher panel */}
-      <AIRoutePlanner
-        open={showRoutePlanner}
-        onClose={() => setShowRoutePlanner(false)}
-        onSaveJob={() => { setShowRoutePlanner(false); }}
-      />
     </>
   );
 }
