@@ -203,91 +203,60 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             {/* ── AI PLANER BUTTON ── */}
             <button
               onClick={() => setAiOpen(true)}
-              className="ai-planer-btn"
               style={{
                 position: "relative",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "7px 14px",
-                background:
-                  "linear-gradient(135deg, #0f0f18 0%, #1a1a2e 50%, #16213e 100%)",
-                border: "1px solid rgba(99,102,241,0.45)",
+                padding: "8px 16px",
+                background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                border: "none",
                 borderRadius: "10px",
                 color: "#fff",
                 fontSize: "13px",
-                fontWeight: 600,
-                letterSpacing: "0.2px",
+                fontWeight: 700,
+                letterSpacing: "0.3px",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
                 whiteSpace: "nowrap",
                 fontFamily: "inherit",
-                animation: pulse ? "ai-btn-glow 2.8s ease-in-out infinite" : "none",
-                boxShadow: "0 0 0 0 rgba(99,102,241,0.45), 0 2px 14px rgba(99,102,241,0.2)",
+                animation: pulse ? "ai-btn-glow 2.4s ease-in-out infinite" : "none",
+                boxShadow: pulse
+                  ? "0 0 18px rgba(99,102,241,0.55), 0 2px 10px rgba(99,102,241,0.3)"
+                  : "0 2px 10px rgba(99,102,241,0.3)",
               }}
               onMouseEnter={(e) => {
                 const el = e.currentTarget;
-                el.style.transform = "translateY(-1px)";
-                el.style.boxShadow = "0 6px 28px rgba(99,102,241,0.5)";
-                el.style.borderColor = "rgba(99,102,241,0.85)";
+                el.style.transform = "translateY(-1px) scale(1.02)";
+                el.style.boxShadow = "0 6px 30px rgba(99,102,241,0.65)";
+                el.style.background = "linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)";
                 el.style.animation = "none";
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget;
-                el.style.transform = "translateY(0)";
-                el.style.boxShadow = "0 0 0 0 rgba(99,102,241,0.45), 0 2px 14px rgba(99,102,241,0.2)";
-                el.style.borderColor = "rgba(99,102,241,0.45)";
-                el.style.animation = pulse
-                  ? "ai-btn-glow 2.8s ease-in-out infinite"
-                  : "none";
+                el.style.transform = "translateY(0) scale(1)";
+                el.style.boxShadow = pulse
+                  ? "0 0 18px rgba(99,102,241,0.55), 0 2px 10px rgba(99,102,241,0.3)"
+                  : "0 2px 10px rgba(99,102,241,0.3)";
+                el.style.background = "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)";
+                el.style.animation = pulse ? "ai-btn-glow 2.4s ease-in-out infinite" : "none";
               }}
             >
-              {/* gradient overlay */}
-              <span
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  borderRadius: "10px",
-                  background:
-                    "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.06))",
-                  pointerEvents: "none",
-                }}
-              />
-              {/* icon */}
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: "22px",
-                  height: "22px",
-                  borderRadius: "6px",
-                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                  boxShadow: "0 0 10px rgba(99,102,241,0.6)",
-                  flexShrink: 0,
-                  position: "relative",
-                  zIndex: 1,
-                }}
-              >
-                <Sparkles className="w-3 h-3 text-white" />
-              </span>
-              <span style={{ position: "relative", zIndex: 1 }}>AI Planner</span>
-              {/* badge */}
+              <Sparkles className="w-3.5 h-3.5 text-white" style={{ flexShrink: 0 }} />
+              <span>AI Planner</span>
               {aiSuggestions > 0 && (
                 <span
                   style={{
-                    position: "relative",
-                    zIndex: 1,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     minWidth: "18px",
                     height: "18px",
                     padding: "0 4px",
-                    background: "#ef4444",
+                    background: "rgba(255,255,255,0.25)",
                     borderRadius: "9px",
                     fontSize: "10px",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     color: "#fff",
                     lineHeight: 1,
                   }}
@@ -326,12 +295,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <style>{`
         @keyframes ai-btn-glow {
           0%, 100% {
-            box-shadow: 0 0 0 0 rgba(99,102,241,0.45),
-                        0 2px 14px rgba(99,102,241,0.18);
+            box-shadow: 0 0 14px rgba(99,102,241,0.45),
+                        0 2px 10px rgba(99,102,241,0.25);
+            transform: scale(1);
           }
           50% {
-            box-shadow: 0 0 0 5px rgba(99,102,241,0),
-                        0 2px 22px rgba(99,102,241,0.42);
+            box-shadow: 0 0 28px rgba(139,92,246,0.75),
+                        0 4px 20px rgba(99,102,241,0.5);
+            transform: scale(1.025);
           }
         }
       `}</style>
