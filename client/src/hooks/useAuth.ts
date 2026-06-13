@@ -65,11 +65,16 @@ export function useAuth() {
     user: null, profile: null, session: null, isLoading: true, isAuthenticated: false,
   });
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase.from("users").select("*").eq("id", userId).single();
-      return error ? null : data as AppUser;
-    } catch { return null; }
+  const fetchProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn('[Auth] fetchProfile() timed out — proceeding without profile');
+        resolve(null);
+      }, 5000);
+      supabase.from("users").select("*").eq("id", userId).single()
+        .then(({ data, error }) => { clearTimeout(timer); resolve(error ? null : data as AppUser); })
+        .catch(() => { clearTimeout(timer); resolve(null); });
+    });
   }, []);
 
   useEffect(() => {

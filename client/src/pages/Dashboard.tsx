@@ -61,6 +61,12 @@ export default function Dashboard() {
   const [showAIDispatcher, setShowAIDispatcher] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [exportingRoute, setExportingRoute] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB"));
+
+  useEffect(() => {
+    const tick = setInterval(() => setCurrentTime(new Date().toLocaleTimeString("en-GB")), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   // Supabase data (replaces tRPC)
   const { vehicles, isLoading: vehiclesLoading, refetch: refetchVehicles } = useVehicles();
@@ -137,8 +143,10 @@ export default function Dashboard() {
   const activeJobCount = jobs.filter((j) => j.status === "in_progress" || j.status === "assigned").length;
   const pendingJobCount = jobs.filter((j) => j.status === "pending").length;
   const completedTodayCount = jobs.filter((j) => {
-    if (j.status !== "completed" || !j.completed_at) return false;
-    return new Date(j.completed_at).toDateString() === new Date().toDateString();
+    if (j.status !== "completed") return false;
+    const ts = j.completed_at || j.updated_at;
+    if (!ts) return false;
+    return new Date(ts).toDateString() === new Date().toDateString();
   }).length;
 
   useEffect(() => {
@@ -293,7 +301,7 @@ export default function Dashboard() {
         <header className="h-14 border-b border-border bg-card/50 flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <h1 className="font-semibold">Dispatch Center</h1>
-            <span className="text-xs text-muted-foreground font-mono">{new Date().toLocaleTimeString("en-GB")} GMT</span>
+            <span className="text-xs text-muted-foreground font-mono">{currentTime} GMT · Live</span>
             {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-red-500"><WifiOff className="w-3 h-3" /> Offline</span>}
           </div>
           <div className="flex items-center gap-2">

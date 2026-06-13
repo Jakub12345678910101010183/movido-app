@@ -31,7 +31,7 @@ import AIRouteDemo from "@/components/AIRouteDemo";
 
 const stats = [
   { value: "99.9%", label: "Uptime" },
-  { value: "< 2s", label: "Location Update" },
+  { value: "<2s", label: "Location Update" },
   { value: "15%", label: "Fuel Savings" },
   { value: "24/7", label: "Support" },
 ];

@@ -358,12 +358,18 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
           };
         }
 
+        const formatDelay = (minsLate: number): string => {
+          if (minsLate < 60) return `${minsLate}min late`;
+          if (minsLate < 1440) return `${Math.round(minsLate / 60)}h late`;
+          return `${Math.round(minsLate / 1440)}d late`;
+        };
+
         const list = delayed
           .map((j) => {
             const minsLate = Math.round(
               (now.getTime() - new Date(j.eta!).getTime()) / 60000
             );
-            return `• **${j.reference}** — ${j.customer}, ${minsLate}min late`;
+            return `• **${j.reference}** — ${j.customer}, ${formatDelay(minsLate)}`;
           })
           .join("\n");
 

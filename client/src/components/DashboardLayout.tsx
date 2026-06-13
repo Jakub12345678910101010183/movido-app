@@ -66,6 +66,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [routePlannerOpen, setRoutePlannerOpen] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState(3);
   const [pulse, setPulse] = useState(true);
+  const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB"));
+
+  useEffect(() => {
+    const tick = setInterval(() => setCurrentTime(new Date().toLocaleTimeString("en-GB")), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   // Stop pulsing after user opens the panel once
   useEffect(() => {
@@ -199,7 +205,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground font-mono">
-              {new Date().toLocaleTimeString("en-GB")} GMT
+              {currentTime} GMT
             </span>
 
             {/* ── AI PLANER BUTTON ── */}
