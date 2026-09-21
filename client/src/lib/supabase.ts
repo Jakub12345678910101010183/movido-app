@@ -124,7 +124,18 @@ export const supabase = createClient<Database>(
       persistSession: true,
       detectSessionInUrl: true,
       storage: customStorage,
-      // Disable lock-based session synchronization to prevent timeouts
+      // Disable lock-based session synchronization to prevent timeouts.
+      //
+      // supabase-js defaults to navigatorLock, and getSession() runs inside
+      // that lock with a 5s acquire timeout. Every request resolves its bearer
+      // through getSession(), so a lock held elsewhere stalls the whole client:
+      // profile reads time out and the app reads the missing profile as "no
+      // access". Running the callback directly is what the rest of this file
+      // already claims to do.
+      //
+      // Trade-off: token refresh is no longer serialised across tabs, so two
+      // open tabs can refresh concurrently.
+      lock: <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => fn(),
       flowType: 'implicit',
     },
     realtime: {
