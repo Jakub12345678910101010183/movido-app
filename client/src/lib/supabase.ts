@@ -126,8 +126,6 @@ export const supabase = createClient<Database>(
       storage: customStorage,
       // Disable lock-based session synchronization to prevent timeouts
       flowType: 'implicit',
-      // Extended timeouts for robust operation
-      detectSessionInUrl: true,
     },
     realtime: {
       params: {

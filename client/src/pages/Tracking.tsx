@@ -15,7 +15,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams } from "wouter";
 import {
   MapPin, Truck, Clock, CheckCircle, Package, Navigation,
-  Loader2, AlertCircle, Phone, RefreshCw,
+  Loader2, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { TomTomMap, type MapMarker, type MapRoute } from "@/components/TomTomMap";
@@ -31,9 +31,10 @@ interface TrackingData {
     eta: string | null;
     pod_status: string;
   };
+  // No phone number: the public payload deliberately omits the driver's
+  // personal contact details (see public.get_tracking).
   driver: {
     name: string;
-    phone: string | null;
     location_lat: number | null;
     location_lng: number | null;
     heading: number | null;
@@ -66,44 +67,55 @@ export default function TrackingPage() {
     if (!token) { setError("No tracking token"); setIsLoading(false); return; }
 
     try {
-      // Lookup job by tracking_token
-      const { data: job, error: jobErr } = await supabase
-        .from("jobs")
-        .select("*, drivers(*), vehicles(*)")
-        .eq("tracking_token", token)
-        .single();
+      // The tables themselves are closed to anonymous callers (D2/D3). This RPC
+      // is the only public channel, and it returns just the columns below —
+      // never a whole job, driver or vehicle row. There is deliberately no
+      // fallback to a direct SELECT: if the RPC fails, tracking fails.
+      const { data: rows, error: rpcErr } = await supabase.rpc("get_tracking", {
+        p_token: token,
+      });
 
-      if (jobErr || !job) { setError("Tracking link not found or expired"); setIsLoading(false); return; }
+      const row = rows?.[0];
+      if (rpcErr || !row) {
+        setError("Tracking link not found or expired");
+        setIsLoading(false);
+        return;
+      }
 
       setData({
         job: {
-          reference: job.reference,
-          customer: job.customer,
-          status: job.status,
-          delivery_address: job.delivery_address,
-          delivery_lat: job.delivery_lat,
-          delivery_lng: job.delivery_lng,
-          eta: job.eta,
-          pod_status: job.pod_status,
+          reference: row.reference,
+          customer: row.customer,
+          status: row.status ?? "pending",
+          delivery_address: row.delivery_address,
+          delivery_lat: row.delivery_lat,
+          delivery_lng: row.delivery_lng,
+          eta: row.eta,
+          pod_status: row.pod_status ?? "pending",
         },
-        driver: job.drivers ? {
-          name: job.drivers.name,
-          phone: job.drivers.phone,
-          location_lat: job.drivers.location_lat,
-          location_lng: job.drivers.location_lng,
-          heading: job.drivers.heading,
-        } : null,
-        vehicle: job.vehicles ? {
-          vehicle_id: job.vehicles.vehicle_id,
-          make: job.vehicles.make,
-          model: job.vehicles.model,
-          registration: job.vehicles.registration,
-        } : null,
+        driver: row.driver_name
+          ? {
+              name: row.driver_name,
+              location_lat: row.driver_location_lat,
+              location_lng: row.driver_location_lng,
+              heading: row.driver_heading,
+            }
+          : null,
+        vehicle: row.vehicle_id
+          ? {
+              vehicle_id: row.vehicle_id,
+              make: row.vehicle_make,
+              model: row.vehicle_model,
+              registration: row.vehicle_registration,
+            }
+          : null,
       });
       setLastUpdate(new Date());
       setError(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch {
+      // Never surface a raw error: it can carry table and column names, and the
+      // token must not appear in the UI.
+      setError("Tracking is unavailable right now. Please try again shortly.");
     } finally {
       setIsLoading(false);
     }
@@ -310,12 +322,6 @@ export default function TrackingPage() {
                     )}
                   </div>
                 </div>
-                {data.driver.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-500" />
-                    <a href={`tel:${data.driver.phone}`} className="text-sm text-cyan-400 hover:underline">{data.driver.phone}</a>
-                  </div>
-                )}
               </div>
             </div>
           )}

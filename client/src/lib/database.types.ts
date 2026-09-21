@@ -20,7 +20,7 @@ export interface Database {
           id: string;
           email: string | null;
           name: string | null;
-          role: "user" | "admin" | "dispatcher" | "driver";
+          role: "user" | "admin" | "dispatcher" | "driver" | "pending";
           avatar_url: string | null;
           created_at: string;
           updated_at: string;
@@ -30,7 +30,7 @@ export interface Database {
           id?: string;
           email?: string | null;
           name?: string | null;
-          role?: "user" | "admin" | "dispatcher" | "driver";
+          role?: "user" | "admin" | "dispatcher" | "driver" | "pending";
           avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -40,11 +40,12 @@ export interface Database {
           id?: string;
           email?: string | null;
           name?: string | null;
-          role?: "user" | "admin" | "dispatcher" | "driver";
+          role?: "user" | "admin" | "dispatcher" | "driver" | "pending";
           avatar_url?: string | null;
           updated_at?: string;
           last_signed_in?: string;
         };
+        Relationships: [];
       };
       vehicles: {
         Row: {
@@ -108,6 +109,7 @@ export interface Database {
           driver_id?: number | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       drivers: {
         Row: {
@@ -168,6 +170,7 @@ export interface Database {
           location_updated_at?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       jobs: {
         Row: {
@@ -250,6 +253,7 @@ export interface Database {
           driver_id?: number | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       messages: {
         Row: {
@@ -273,6 +277,7 @@ export interface Database {
         Update: {
           read?: boolean;
         };
+        Relationships: [];
       };
       fleet_maintenance: {
         Row: {
@@ -314,12 +319,46 @@ export interface Database {
           next_due_mileage?: number | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
     };
     Views: {};
-    Functions: {};
+    Functions: {
+      /**
+       * Public tracking payload for /track/:token.
+       *
+       * The tables behind it are closed to anonymous callers, so this SECURITY
+       * DEFINER function is the only public channel. It returns exactly the 17
+       * columns below — never a whole job, driver or vehicle row — and it
+       * deliberately omits the driver's phone number.
+       *
+       * Signature mirrors public.get_tracking(p_token text) as deployed.
+       */
+      get_tracking: {
+        Args: { p_token: string };
+        Returns: {
+          reference: string;
+          customer: string;
+          status: string;
+          delivery_address: string | null;
+          delivery_lat: number | null;
+          delivery_lng: number | null;
+          eta: string | null;
+          pod_status: string;
+          driver_name: string | null;
+          driver_heading: number | null;
+          driver_location_lat: number | null;
+          driver_location_lng: number | null;
+          driver_location_updated_at: string | null;
+          vehicle_id: string | null;
+          vehicle_make: string | null;
+          vehicle_model: string | null;
+          vehicle_registration: string | null;
+        }[];
+      };
+    };
     Enums: {
-      user_role: "user" | "admin" | "dispatcher" | "driver";
+      user_role: "user" | "admin" | "dispatcher" | "driver" | "pending";
       vehicle_type: "hgv" | "lgv" | "van";
       vehicle_status: "active" | "idle" | "maintenance" | "offline";
       driver_status: "on_duty" | "available" | "off_duty" | "on_break";
@@ -330,6 +369,14 @@ export interface Database {
       maintenance_type: "service" | "mot" | "repair" | "inspection" | "tyre";
       maintenance_status: "scheduled" | "overdue" | "completed" | "cancelled";
     };
+    /**
+     * supabase-js only accepts a schema that structurally matches its
+     * GenericSchema, and that requires CompositeTypes. Without it the client
+     * silently resolves every from()/rpc() result to `never`, which is why
+     * typed queries used to fail to compile. The project has no composite
+     * types, so the map is empty.
+     */
+    CompositeTypes: {};
   };
 }
 
