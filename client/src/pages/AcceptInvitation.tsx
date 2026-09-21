@@ -24,7 +24,9 @@
  * needs nothing but the token and the caller's verified JWT, so the account is
  * left untouched until the backend has accepted the invitation — an expired,
  * already-used or mismatched one can no longer change the password on its way
- * to being refused.
+ * to being refused. If the password step fails, a non-secret activation marker
+ * tied to the signed-in account lets the same user finish after a refresh; no
+ * token and no hash is ever written anywhere.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -79,6 +81,45 @@ async function readFunctionError(err: unknown): Promise<string> {
   return "GENERIC";
 }
 
+/**
+ * Non-secret marker for "this signed-in account redeemed an invitation and has
+ * not finished setting a password yet".
+ *
+ * It holds a user id and nothing else — no token, no hash, no credential of any
+ * kind — and it grants nothing on its own: the password is always set through
+ * supabase.auth.updateUser, which acts on the caller's own verified session and
+ * can reach no other account. Forging the marker for someone else's id only
+ * shows this form; the password change would still land on the forger's own
+ * account. It lives in sessionStorage, so it dies with the tab, and it is
+ * matched against the id of the account actually signed in, so a stale marker
+ * cannot follow a different user.
+ */
+const ACTIVATION_KEY = "movido.activation.password_pending";
+
+function readActivationMarker(userId: string): boolean {
+  try {
+    return window.sessionStorage.getItem(ACTIVATION_KEY) === userId;
+  } catch {
+    return false;
+  }
+}
+
+function writeActivationMarker(userId: string): void {
+  try {
+    window.sessionStorage.setItem(ACTIVATION_KEY, userId);
+  } catch {
+    /* a tab without storage simply loses the refresh recovery */
+  }
+}
+
+function clearActivationMarker(): void {
+  try {
+    window.sessionStorage.removeItem(ACTIVATION_KEY);
+  } catch {
+    /* nothing to clean up */
+  }
+}
+
 export default function AcceptInvitation() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [message, setMessage] = useState("");
@@ -93,6 +134,9 @@ export default function AcceptInvitation() {
   // single-use, so a second redemption attempt would be rejected; if only the
   // password step fails, the retry has to skip straight to it.
   const redeemedRef = useRef(false);
+
+  // The signed-in account's id, for the activation marker and nothing else.
+  const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -115,21 +159,30 @@ export default function AcceptInvitation() {
       );
     }
 
-    if (!token) {
-      setPhase("no_token");
-      return;
-    }
+    // Without a token there is one way forward: an invitation this account
+    // already redeemed, whose password step did not finish. The marker says so;
+    // the session says who is asking.
+    const admit = (userId: string): Phase => {
+      userIdRef.current = userId;
+      if (token) return "form";
+      if (readActivationMarker(userId)) {
+        redeemedRef.current = true;
+        return "form";
+      }
+      return "no_token";
+    };
 
     // supabase-js picks the session out of the URL hash by itself; give it the
     // chance to finish, and listen in case it lands after this first check.
     const resolveSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (!active) return;
-      if (data.session?.user?.email) {
-        setEmail(data.session.user.email);
-        setPhase("form");
+      const user = data.session?.user;
+      if (user?.email) {
+        setEmail(user.email);
+        setPhase(admit(user.id));
       } else {
-        setPhase("needs_sign_in");
+        setPhase(token ? "needs_sign_in" : "no_token");
       }
     };
 
@@ -137,10 +190,13 @@ export default function AcceptInvitation() {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      if (session?.user?.email) {
-        setEmail(session.user.email);
+      const user = session?.user;
+      if (user?.email) {
+        setEmail(user.email);
+        const next = admit(user.id);
         setPhase((current) =>
-          current === "needs_sign_in" || current === "loading"
+          (current === "needs_sign_in" || current === "loading") &&
+          next === "form"
             ? "form"
             : current
         );
@@ -193,9 +249,12 @@ export default function AcceptInvitation() {
       }
 
       // Redeemed, and the invitation is single-use: the token is spent and is
-      // dropped here rather than held for a retry that could not succeed.
+      // dropped here rather than held for a retry that could not succeed. The
+      // marker takes its place so a refresh between here and the password step
+      // can still be finished by this same account.
       redeemedRef.current = true;
       tokenRef.current = null;
+      if (userIdRef.current) writeActivationMarker(userIdRef.current);
     }
 
     // 2 — Set the password on the account the session already belongs to. No
@@ -227,6 +286,7 @@ export default function AcceptInvitation() {
       }
     }
 
+    clearActivationMarker();
     setPhase("success");
   };
 
