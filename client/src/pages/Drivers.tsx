@@ -71,7 +71,14 @@ const statusLabels: Record<string, string> = { on_duty: "On Duty", available: "A
 // through the ACTIVE_INVITATION_EXISTS response.
 // ============================================
 
-/** Errors worth a second attempt; everything else is a settled answer. */
+/**
+ * Codes that leave the dialog open for another attempt.
+ *
+ * These are not a promise that a second attempt sends a new link. When the
+ * invitation row has already been created and only a later step failed, the
+ * next call comes back as ACTIVE_INVITATION_EXISTS instead. The messages below
+ * say that plainly rather than claiming a retry will work.
+ */
 const RETRYABLE_INVITE_ERRORS = new Set([
   "EMAIL_NOT_SENT",
   "INVITE_LINK_FAILED",
@@ -111,15 +118,17 @@ function getInviteMessage(code: string, driverName: string): string {
     case "DRIVER_ALREADY_LINKED":
       return `${driverName} already has an account.`;
     case "ACTIVE_INVITATION_EXISTS":
-      return `An invitation for ${driverName} is already pending.`;
+      return `An invitation for ${driverName} is already pending. It has to expire or be revoked before a new one can be sent.`;
     case "PLAN_LIMIT_REACHED":
       return "Your plan's driver limit has been reached.";
     case "INVALID_DRIVER_EMAIL":
       return `Add a valid email address for ${driverName} first.`;
     case "INVITE_LINK_FAILED":
-      return "The invitation could not be prepared. Please try again.";
+      return "The invitation link could not be prepared. Trying again may report that an invitation is already pending.";
     case "EMAIL_NOT_SENT":
-      return "Invitation created, but the email could not be sent.";
+      return `The invitation for ${driverName} was created, but the email could not be sent. Trying again may report that an invitation is already pending — if it does, it has to expire or be revoked before a new one can be sent.`;
+    case "SERVER_ERROR":
+      return "The invitation did not complete, and it is not certain whether one was created. Trying again may report that an invitation is already pending.";
     default:
       return "Something went wrong.";
   }
@@ -476,7 +485,8 @@ export default function Drivers() {
               </p>
               <p className="text-xs text-muted-foreground">
                 The driver will receive a link to set up their account for the Movido
-                Driver app. It expires in 7 days.
+                Driver app. The link is single-use and expires — if it no longer
+                works, send a new invitation.
               </p>
             </div>
             <DialogFooter>

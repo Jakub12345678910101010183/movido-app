@@ -11,8 +11,10 @@
  * The token is held in component state only. It is never logged, never written
  * to localStorage or sessionStorage, and it is stripped from the address bar as
  * soon as it has been read, so it cannot leak through history or a Referer
- * header. It is not hashed here either: a hash sent from the browser would be
- * just as usable as the token, so hashing happens in the Edge Function.
+ * header. Only the token parameter is stripped: the Supabase hash is left in
+ * place for supabase-js to consume and clear on its own. The token is not
+ * hashed here either: a hash sent from the browser would be just as usable as
+ * the token, so hashing happens in the Edge Function.
  *
  * Nothing on this page is authoritative. The driver record, the organization
  * and the role all come from the invitation row, inside the accept-invitation
@@ -85,12 +87,21 @@ export default function AcceptInvitation() {
     let active = true;
 
     // Take the token out of the URL immediately, then rewrite the address bar
-    // so it is not left in history or sent on as a referrer.
+    // so it is not left in history or sent on as a referrer. Only the token
+    // parameter is removed: the hash carries the implicit-flow session that
+    // supabase-js still has to consume, and any other query parameter belongs
+    // to whoever put it there.
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (token) {
       tokenRef.current = token;
-      window.history.replaceState({}, "", window.location.pathname);
+      params.delete("token");
+      const query = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
     }
 
     if (!token) {
