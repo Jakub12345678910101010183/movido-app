@@ -19,6 +19,12 @@
  * Nothing on this page is authoritative. The driver record, the organization
  * and the role all come from the invitation row, inside the accept-invitation
  * function and the RPC behind it. This page sends a token and a password.
+ *
+ * The invitation is redeemed before the password is set. accept-invitation
+ * needs nothing but the token and the caller's verified JWT, so the account is
+ * left untouched until the backend has accepted the invitation — an expired,
+ * already-used or mismatched one can no longer change the password on its way
+ * to being refused.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -83,6 +89,11 @@ export default function AcceptInvitation() {
   // The raw token: memory only, never state that renders and never storage.
   const tokenRef = useRef<string | null>(null);
 
+  // Set once accept-invitation has accepted the token. The invitation is
+  // single-use, so a second redemption attempt would be rejected; if only the
+  // password step fails, the retry has to skip straight to it.
+  const redeemedRef = useRef(false);
+
   useEffect(() => {
     let active = true;
 
@@ -144,11 +155,6 @@ export default function AcceptInvitation() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = tokenRef.current;
-    if (!token) {
-      setPhase("no_token");
-      return;
-    }
 
     if (password.length < MIN_PASSWORD_LENGTH) {
       setMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
@@ -162,26 +168,44 @@ export default function AcceptInvitation() {
     setMessage("");
     setPhase("submitting");
 
-    // 1 — Set the password on the account the session already belongs to. No
+    // 1 — Redeem the invitation first. The function derives the caller from the
+    //     JWT and the driver from the invitation; neither is sent from here.
+    //     Nothing about the account changes until the backend has accepted the
+    //     token, so an expired, used, or mismatched invitation leaves the
+    //     password exactly as it was.
+    if (!redeemedRef.current) {
+      const token = tokenRef.current;
+      if (!token) {
+        setPhase("no_token");
+        return;
+      }
+
+      const { error: fnErr } = await supabase.functions.invoke(
+        "accept-invitation",
+        { body: { token } },
+      );
+
+      if (fnErr) {
+        const code = await readFunctionError(fnErr);
+        setMessage(MESSAGES[code] ?? MESSAGES.GENERIC);
+        setPhase("error");
+        return;
+      }
+
+      // Redeemed, and the invitation is single-use: the token is spent and is
+      // dropped here rather than held for a retry that could not succeed.
+      redeemedRef.current = true;
+      tokenRef.current = null;
+    }
+
+    // 2 — Set the password on the account the session already belongs to. No
     //     signUp: the account exists, and signing up would create a second one.
+    //     A failure here leaves the invitation redeemed, so the retry runs this
+    //     step alone.
     const { error: pwErr } = await supabase.auth.updateUser({ password });
     if (pwErr) {
       setMessage(MESSAGES.PASSWORD_FAILED);
       setPhase("form");
-      return;
-    }
-
-    // 2 — Redeem the invitation. The function derives the caller from the JWT
-    //     and the driver from the invitation; neither is sent from here.
-    const { error: fnErr } = await supabase.functions.invoke(
-      "accept-invitation",
-      { body: { token } },
-    );
-
-    if (fnErr) {
-      const code = await readFunctionError(fnErr);
-      setMessage(MESSAGES[code] ?? MESSAGES.GENERIC);
-      setPhase("error");
       return;
     }
 
@@ -203,7 +227,6 @@ export default function AcceptInvitation() {
       }
     }
 
-    tokenRef.current = null;
     setPhase("success");
   };
 
