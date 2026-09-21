@@ -27,17 +27,27 @@ const clearStuckLock = () => {
   } catch { /* ignore */ }
 };
 
-const getSessionWithTimeout = (timeoutMs = 8000): Promise<Session | null> => {
+/**
+ * Reads the session, reporting whether the read itself failed.
+ *
+ * `timedOut` matters: getSession() goes through the Web Locks API, so a lock
+ * held elsewhere hangs it. A read that never answered says nothing about
+ * whether a session exists, and must not be mistaken for "signed out" — that
+ * mistake used to wipe a perfectly valid token out of localStorage.
+ */
+type SessionRead = { session: Session | null; timedOut: boolean };
+
+const getSessionWithTimeout = (timeoutMs = 8000): Promise<SessionRead> => {
   return new Promise((resolve) => {
     let resolved = false;
     const timer = setTimeout(() => {
-      if (!resolved) { resolved = true; console.warn('[Auth] getSession() timed out — clearing stuck lock'); resolve(null); }
+      if (!resolved) { resolved = true; console.warn('[Auth] getSession() timed out — falling back to stored session'); resolve({ session: null, timedOut: true }); }
     }, timeoutMs);
     supabase.auth.getSession()
       .then(({ data: { session }, error }) => {
-        if (!resolved) { resolved = true; clearTimeout(timer); resolve(error ? null : session); }
+        if (!resolved) { resolved = true; clearTimeout(timer); resolve({ session: error ? null : session, timedOut: Boolean(error) }); }
       })
-      .catch(() => { if (!resolved) { resolved = true; clearTimeout(timer); resolve(null); } });
+      .catch(() => { if (!resolved) { resolved = true; clearTimeout(timer); resolve({ session: null, timedOut: true }); } });
   });
 };
 
@@ -82,10 +92,13 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        let session = await getSessionWithTimeout(8000);
-        if (!session) session = restoreSessionFromStorage();
+        const read = await getSessionWithTimeout(8000);
+        const session = read.session ?? restoreSessionFromStorage();
         if (!session || !isValidSession(session)) {
-          clearStuckLock();
+          // Only clear when the read actually answered "no session". After a
+          // failed read the stored token may still be good, and clearing it
+          // would sign the user out for no reason.
+          if (!read.timedOut) clearStuckLock();
           if (mounted) setState(prev => ({ ...prev, isLoading: false }));
           return;
         }
