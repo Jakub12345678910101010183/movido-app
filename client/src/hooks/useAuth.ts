@@ -9,12 +9,19 @@ import { supabase } from "@/lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 import type { User as AppUser } from "@/lib/database.types";
 
+/**
+ * Where the profile read stands. "loading" is not the same answer as "this
+ * account has no role": the first must never deny access, the second must.
+ */
+export type ProfileStatus = "idle" | "loading" | "loaded" | "error";
+
 interface AuthState {
   user: User | null;
   profile: AppUser | null;
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  profileStatus: ProfileStatus;
 }
 
 const STORAGE_KEY = 'sb-zjvozjnbvrtrrpehqdpf-auth-token';
@@ -73,19 +80,8 @@ const saveSession = (s: Session | null): void => {
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     user: null, profile: null, session: null, isLoading: true, isAuthenticated: false,
+    profileStatus: "idle",
   });
-
-  const fetchProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        console.warn('[Auth] fetchProfile() timed out — proceeding without profile');
-        resolve(null);
-      }, 5000);
-      supabase.from("users").select("*").eq("id", userId).single()
-        .then(({ data, error }) => { clearTimeout(timer); resolve(error ? null : data as AppUser); })
-        .catch(() => { clearTimeout(timer); resolve(null); });
-    });
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -104,8 +100,16 @@ export function useAuth() {
         }
         if (!mounted) return;
         saveSession(session);
-        const profile = await fetchProfile(session.user.id);
-        if (mounted) setState({ user: session.user, profile, session, isLoading: false, isAuthenticated: true });
+        // The profile is read by its own effect, never from here. A query
+        // issued on this path resolves its bearer through auth.getSession(),
+        // which waits on the very initialisation this code is part of, so the
+        // request would never reach the network.
+        if (mounted) {
+          setState({
+            user: session.user, profile: null, session,
+            isLoading: false, isAuthenticated: true, profileStatus: "loading",
+          });
+        }
       } catch {
         clearStuckLock();
         if (mounted) setState(prev => ({ ...prev, isLoading: false }));
@@ -114,23 +118,75 @@ export function useAuth() {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Deliberately synchronous. supabase-js awaits every state-change callback
+    // (_notifyAllSubscribers does `await Promise.all(...)`) and emits
+    // INITIAL_SESSION from inside its own initialisation lock, so anything
+    // awaited here holds up the client that the awaited call itself depends on.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         saveSession(session);
-        const profile = await fetchProfile(session.user.id);
-        if (mounted) setState({ user: session.user, profile, session, isLoading: false, isAuthenticated: true });
+        const nextUser = session.user;
+        setState(prev => ({
+          ...prev,
+          user: nextUser,
+          session,
+          isLoading: false,
+          isAuthenticated: true,
+          // Keep a profile already loaded for this same account; a different
+          // account starts over.
+          profile: prev.user?.id === nextUser.id ? prev.profile : null,
+          profileStatus:
+            prev.user?.id === nextUser.id && prev.profileStatus === "loaded"
+              ? "loaded"
+              : "loading",
+        }));
       } else if (event === 'TOKEN_REFRESHED' && session) {
         saveSession(session);
-        if (mounted) setState(prev => ({ ...prev, session, user: session.user }));
+        setState(prev => ({ ...prev, session, user: session.user }));
       } else if (event === 'SIGNED_OUT') {
         clearStuckLock();
-        if (mounted) setState({ user: null, profile: null, session: null, isLoading: false, isAuthenticated: false });
+        setState({
+          user: null, profile: null, session: null,
+          isLoading: false, isAuthenticated: false, profileStatus: "idle",
+        });
       }
     });
 
     return () => { mounted = false; subscription?.unsubscribe(); };
-  }, [fetchProfile]);
+  }, []);
+
+  // Profile read, on its own effect.
+  //
+  // This runs after render, outside supabase-js's initialisation and outside
+  // its state-change notification, so auth.getSession() is already settled by
+  // the time the query resolves its bearer and the request actually goes out.
+  // There is no timeout race here: a slow answer is still an answer, and the
+  // outcome is recorded as a status rather than silently becoming "no role".
+  const userId = state.user?.id ?? null;
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+
+    void (async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!active) return;
+      setState(prev => {
+        if (prev.user?.id !== userId) return prev;
+        if (error || !data) {
+          return { ...prev, profile: null, profileStatus: "error" };
+        }
+        return { ...prev, profile: data as AppUser, profileStatus: "loaded" };
+      });
+    })();
+
+    return () => { active = false; };
+  }, [userId]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -156,7 +212,7 @@ export function useAuth() {
     if (!state.user) throw new Error('Not authenticated');
     const { data, error } = await supabase.from('users').update(updates).eq('id', state.user.id).select().single();
     if (error) throw error;
-    setState(prev => ({ ...prev, profile: data as AppUser }));
+    setState(prev => ({ ...prev, profile: data as AppUser, profileStatus: "loaded" }));
     return data;
   }, [state.user]);
 
