@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, Edit, Trash2, User, Phone, Mail, Clock, Star, RefreshCw, Loader2, Award, Bell, Send, Megaphone, AlertOctagon } from "lucide-react";
+import { Plus, Search, Filter, Edit, Trash2, User, Phone, Mail, Clock, Star, RefreshCw, Loader2, Award, Bell, Send, Megaphone, AlertOctagon, UserPlus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 import { useDrivers } from "@/hooks/useSupabaseData";
 import type { Driver } from "@/lib/database.types";
 
@@ -59,6 +60,91 @@ const statusColors: Record<string, string> = {
 };
 const statusLabels: Record<string, string> = { on_duty: "On Duty", available: "Available", off_duty: "Off Duty", on_break: "On Break" };
 
+// ============================================
+// Driver invitation helpers
+//
+// The invitation itself is entirely server-side: invite-driver creates the
+// token, hashes it and mails the link. This page only names a driver and reads
+// back the outcome. public.driver_invitations is backend-only (RLS on, no
+// policies, no grants for authenticated), so there is deliberately no way to
+// query invitation state from here — a pending invitation is discovered only
+// through the ACTIVE_INVITATION_EXISTS response.
+// ============================================
+
+/**
+ * Codes that leave the dialog open for another attempt.
+ *
+ * These are not a promise that a second attempt sends a new link. When the
+ * invitation row has already been created and only a later step failed, the
+ * next call comes back as ACTIVE_INVITATION_EXISTS instead. The messages below
+ * say that plainly rather than claiming a retry will work.
+ */
+const RETRYABLE_INVITE_ERRORS = new Set([
+  "EMAIL_NOT_SENT",
+  "INVITE_LINK_FAILED",
+  "SERVER_ERROR",
+]);
+
+/**
+ * supabase-js collapses a non-2xx Edge Function response into a generic
+ * message, so the backend's own error code has to be read off the Response it
+ * carries. Anything unreadable is treated as a server error.
+ */
+async function readInviteError(err: unknown): Promise<string> {
+  if (!err || typeof err !== "object") return "SERVER_ERROR";
+  const ctx = (err as { context?: unknown }).context;
+  if (ctx instanceof Response) {
+    try {
+      const body = (await ctx.json()) as { error?: unknown };
+      if (typeof body.error === "string") return body.error;
+    } catch {
+      /* fall through to the generic code */
+    }
+  }
+  return "SERVER_ERROR";
+}
+
+/** Maps the codes invite-driver already returns. No new codes are invented. */
+function getInviteMessage(code: string, driverName: string): string {
+  switch (code) {
+    case "UNAUTHENTICATED":
+      return "Your session has expired. Please sign in again.";
+    case "FORBIDDEN":
+      return "You are not allowed to invite drivers.";
+    case "INVALID_REQUEST":
+      return "That request was not valid.";
+    case "DRIVER_NOT_FOUND":
+      return "Driver not found.";
+    case "DRIVER_ALREADY_LINKED":
+      return `${driverName} already has an account.`;
+    case "ACTIVE_INVITATION_EXISTS":
+      return `An invitation for ${driverName} is already pending. It has to expire or be revoked before a new one can be sent.`;
+    case "PLAN_LIMIT_REACHED":
+      return "Your plan's driver limit has been reached.";
+    case "INVALID_DRIVER_EMAIL":
+      return `Add a valid email address for ${driverName} first.`;
+    case "INVITE_LINK_FAILED":
+      return "The invitation link could not be prepared. Trying again may report that an invitation is already pending.";
+    case "EMAIL_NOT_SENT":
+      return `The invitation for ${driverName} was created, but the email could not be sent. Trying again may report that an invitation is already pending — if it does, it has to expire or be revoked before a new one can be sent.`;
+    case "SERVER_ERROR":
+      return "The invitation did not complete, and it is not certain whether one was created. Trying again may report that an invitation is already pending.";
+    default:
+      return "Something went wrong.";
+  }
+}
+
+/** john.smith@example.com → j•••@e•••.com. Confirmation only, never a control. */
+function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1 || at === email.length - 1) return "•••";
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const dot = domain.lastIndexOf(".");
+  if (dot < 1 || dot === domain.length - 1) return `${local[0]}•••@•••`;
+  return `${local[0]}•••@${domain[0]}•••${domain.slice(dot)}`;
+}
+
 interface DriverFormData {
   name: string; email: string; phone: string;
   status: "on_duty" | "available" | "off_duty" | "on_break";
@@ -89,6 +175,11 @@ export default function Drivers() {
   const [notifyMessage, setNotifyMessage] = useState("");
   const [isSendingPush, setIsSendingPush] = useState(false);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+
+  // Driver invitation state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteDriver, setInviteDriver] = useState<Driver | null>(null);
+  const [isInviting, setIsInviting] = useState(false);
 
   const { drivers, isLoading, refetch, create, update, remove } = useDrivers();
 
@@ -196,6 +287,59 @@ export default function Drivers() {
     setNotifyMessage("");
   };
 
+  // ============================================
+  // Driver invitation
+  // ============================================
+
+  const openInvite = (driver: Driver) => {
+    // The button is disabled in both of these cases; this is the second guard.
+    if (driver.user_id !== null || !driver.email) return;
+    setInviteDriver(driver);
+    setShowInviteModal(true);
+  };
+
+  const reportInviteFailure = async (err: unknown, driverName: string) => {
+    const code = await readInviteError(err);
+    const message = getInviteMessage(code, driverName);
+    if (code === "EMAIL_NOT_SENT") toast.warning(message);
+    else toast.error(message);
+
+    // A settled answer closes the dialog; a retryable one leaves it open so the
+    // dispatcher can try again without finding the driver a second time.
+    if (!RETRYABLE_INVITE_ERRORS.has(code)) {
+      setShowInviteModal(false);
+      setInviteDriver(null);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteDriver || isInviting) return;
+    const driver = inviteDriver;
+    setIsInviting(true);
+    try {
+      // driver_id is the only input. organization_id, email and role are read
+      // server-side from the caller's profile and the driver record; sending
+      // any of them here is rejected with 400 by design.
+      const { error } = await supabase.functions.invoke("invite-driver", {
+        body: { driver_id: driver.id },
+      });
+
+      if (error) {
+        await reportInviteFailure(error, driver.name);
+        return;
+      }
+
+      toast.success(`Invitation sent to ${driver.name}`);
+      setShowInviteModal(false);
+      setInviteDriver(null);
+      await refetch();
+    } catch (err) {
+      await reportInviteFailure(err, driver.name);
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   const renderForm = () => (
     <div className="grid gap-4 py-4">
       <div><Label>Name *</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., John Smith" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
@@ -273,6 +417,28 @@ export default function Drivers() {
                       <Button
                         variant="outline"
                         size="icon"
+                        title={
+                          driver.user_id !== null
+                            ? `${driver.name} already has an account`
+                            : !driver.email
+                            ? "Add an email address for this driver first"
+                            : "Invite driver to the Movido Driver app"
+                        }
+                        className={
+                          driver.user_id === null && driver.email
+                            ? "text-cyan border-cyan/30 hover:bg-cyan/10"
+                            : "text-muted-foreground"
+                        }
+                        disabled={driver.user_id !== null || !driver.email || isInviting}
+                        onClick={() => openInvite(driver)}
+                      >
+                        {isInviting && inviteDriver?.id === driver.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <UserPlus className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
                         title="Send push notification"
                         className={(driver as any).push_token ? "text-cyan border-cyan/30 hover:bg-cyan/10" : "text-muted-foreground"}
                         onClick={() => openNotify(driver)}
@@ -292,6 +458,53 @@ export default function Drivers() {
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Add New Driver</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button><Button onClick={handleAdd} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Add Driver</Button></DialogFooter></DialogContent></Dialog>
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Edit Driver</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button><Button onClick={handleEdit} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button></DialogFooter></DialogContent></Dialog>
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}><DialogContent className="bg-card border-border max-w-md"><DialogHeader><DialogTitle>Delete Driver</DialogTitle></DialogHeader><p className="text-muted-foreground">Are you sure you want to delete <strong className="text-foreground">{selectedDriver?.name}</strong>? This action cannot be undone.</p><DialogFooter><Button variant="outline" onClick={() => setShowDeleteModal(false)}>Cancel</Button><Button variant="destructive" onClick={handleDelete} disabled={isSaving}>{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Delete</Button></DialogFooter></DialogContent></Dialog>
+
+        {/* ========== INVITE DRIVER MODAL ========== */}
+        <Dialog
+          open={showInviteModal}
+          onOpenChange={(open) => {
+            if (isInviting) return;
+            setShowInviteModal(open);
+            if (!open) setInviteDriver(null);
+          }}
+        >
+          <DialogContent className="bg-card border-border max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-primary" />
+                Invite {inviteDriver?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-3">
+              <p className="text-sm">
+                Send an invitation to{" "}
+                <strong className="text-foreground font-mono">
+                  {inviteDriver?.email ? maskEmail(inviteDriver.email) : "—"}
+                </strong>
+                ?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The driver will receive a link to set up their account for the Movido
+                Driver app. The link is single-use and expires — if it no longer
+                works, send a new invitation.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => { setShowInviteModal(false); setInviteDriver(null); }}
+                disabled={isInviting}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleInvite} disabled={isInviting} className="glow-cyan-sm">
+                {isInviting
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                  : <><UserPlus className="w-4 h-4 mr-2" />Send invitation</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ========== NOTIFY DRIVER MODAL ========== */}
         <Dialog open={showNotifyModal} onOpenChange={setShowNotifyModal}>
