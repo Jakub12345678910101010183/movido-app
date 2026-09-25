@@ -28,6 +28,7 @@ import WTD from "./pages/WTD";
 import AuthCallback from "./pages/AuthCallback";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import ResetPassword from "./pages/ResetPassword";
+import RlsTest from "./pages/RlsTest";
 
 function Router() {
   return (
@@ -93,6 +94,19 @@ function Router() {
       </Route>
       <Route path="/wtd">
         <RequireAuth fallback={<Login />}><WTD /></RequireAuth>
+      </Route>
+
+      {/* TEMPORARY diagnostic route — delete before merge. Signed in only, but
+          open to every role: the point is to run the checks as a driver, whom
+          the dispatch roles would turn away. Read-only, six SELECTs, nothing
+          identifying rendered. */}
+      <Route path="/rls-test">
+        <RequireAuth
+          fallback={<Login />}
+          allow={["admin", "dispatcher", "driver", "pending"]}
+        >
+          <RlsTest />
+        </RequireAuth>
       </Route>
 
       <Route path="/404" component={NotFound} />
