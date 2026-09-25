@@ -27,6 +27,7 @@ import DocumentScanner from "./pages/DocumentScanner";
 import WTD from "./pages/WTD";
 import AuthCallback from "./pages/AuthCallback";
 import AcceptInvitation from "./pages/AcceptInvitation";
+import ResetPassword from "./pages/ResetPassword";
 
 function Router() {
   return (
@@ -39,6 +40,9 @@ function Router() {
       {/* Public on purpose: an invited driver arrives here before a session
           exists, so RequireAuth would lock them out of their own activation. */}
       <Route path="/accept-invitation" component={AcceptInvitation} />
+      {/* Public on purpose: somebody following a recovery link has no role yet,
+          so RequireAuth would lock them out of setting a new password. */}
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/track/:token" component={Tracking} />
 
       {/* Protected routes */}

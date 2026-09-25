@@ -203,6 +203,24 @@ export function useAuth() {
     return data;
   }, []);
 
+  /**
+   * Sends a recovery link. The outcome is deliberately not reported back in a
+   * way that distinguishes a known address from an unknown one — callers show
+   * the same message either way. Nothing about the request is logged.
+   */
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  }, []);
+
+  /** Sets a new password on the session the caller already holds. */
+  const updatePassword = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  }, []);
+
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -216,5 +234,13 @@ export function useAuth() {
     return data;
   }, [state.user]);
 
-  return { ...state, signInWithEmail, signUpWithEmail, signOut, updateProfile };
+  return {
+    ...state,
+    signInWithEmail,
+    signUpWithEmail,
+    requestPasswordReset,
+    updatePassword,
+    signOut,
+    updateProfile,
+  };
 }

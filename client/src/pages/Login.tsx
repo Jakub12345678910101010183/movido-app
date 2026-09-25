@@ -8,22 +8,23 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Truck, LogIn, UserPlus, AlertCircle, Loader2 } from "lucide-react";
+import { Truck, LogIn, UserPlus, AlertCircle, Loader2, KeyRound, MailCheck } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useLocation, useSearch } from "wouter";
 
 export default function Login() {
-  const { signInWithEmail, signUpWithEmail } = useAuthContext();
+  const { signInWithEmail, signUpWithEmail, requestPasswordReset } = useAuthContext();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const redirectTo = new URLSearchParams(search).get("redirect") || "/dashboard";
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showResetSent, setShowResetSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +32,18 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      if (mode === "login") {
+      if (mode === "forgot") {
+        // The outcome is never reported differently for a known and an unknown
+        // address: both end on the same screen, so this form cannot be used to
+        // find out who has an account. A failure is swallowed for the same
+        // reason, and nothing about the request is logged.
+        try {
+          await requestPasswordReset(email);
+        } catch {
+          /* deliberately indistinguishable from success */
+        }
+        setShowResetSent(true);
+      } else if (mode === "login") {
         await signInWithEmail(email, password);
         setLocation(redirectTo);
       } else {
@@ -44,6 +56,35 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  if (showResetSent) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center">
+            <MailCheck className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold">Check your inbox</h2>
+          {/* Deliberately says nothing about whether this address has an
+              account. The wording is identical either way. */}
+          <p className="text-muted-foreground text-sm">
+            If an account exists for that address, a link to set a new password
+            is on its way. The link can only be used once.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowResetSent(false);
+              setMode("login");
+              setError("");
+            }}
+          >
+            Back to Sign In
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (showConfirmation) {
     return (
@@ -130,11 +171,17 @@ export default function Login() {
 
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl font-bold">
-              {mode === "login" ? "Sign in" : "Create account"}
+              {mode === "login"
+                ? "Sign in"
+                : mode === "forgot"
+                ? "Reset your password"
+                : "Create account"}
             </h2>
             <p className="text-sm text-muted-foreground">
               {mode === "login"
                 ? "Enter your credentials to access the Dispatch Center"
+                : mode === "forgot"
+                ? "Enter the email address for your account and we will send a link to set a new password"
                 : "Set up your Movido account"}
             </p>
           </div>
@@ -175,19 +222,36 @@ export default function Login() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="bg-muted/30"
-              />
-            </div>
+            {mode !== "forgot" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                      onClick={() => {
+                        setMode("forgot");
+                        setError("");
+                        setPassword("");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="bg-muted/30"
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -198,26 +262,58 @@ export default function Login() {
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : mode === "login" ? (
                 <LogIn className="w-4 h-4" />
+              ) : mode === "forgot" ? (
+                <KeyRound className="w-4 h-4" />
               ) : (
                 <UserPlus className="w-4 h-4" />
               )}
-              {mode === "login" ? "Sign In" : "Create Account"}
+              {mode === "login"
+                ? "Sign In"
+                : mode === "forgot"
+                ? "Send reset link"
+                : "Create Account"}
             </Button>
           </form>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <button
               type="button"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              className="block w-full text-sm text-muted-foreground hover:text-primary transition-colors"
               onClick={() => {
-                setMode(mode === "login" ? "register" : "login");
+                setMode(mode === "register" ? "login" : "register");
                 setError("");
               }}
             >
-              {mode === "login"
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Sign in"}
+              {mode === "register"
+                ? "Already have an account? Sign in"
+                : "Don't have an account? Sign up"}
             </button>
+
+            {/* Always offered, whether or not the password is remembered. */}
+            {mode === "forgot" ? (
+              <button
+                type="button"
+                className="block w-full text-sm text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                }}
+              >
+                Back to Sign In
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="block w-full text-sm text-primary hover:underline"
+                onClick={() => {
+                  setMode("forgot");
+                  setError("");
+                  setPassword("");
+                }}
+              >
+                Forgot password? Odzyskaj konto
+              </button>
+            )}
           </div>
         </div>
       </div>

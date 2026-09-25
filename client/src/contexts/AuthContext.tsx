@@ -40,6 +40,8 @@ interface AuthContextType {
   profileStatus: ProfileStatus;
   signInWithEmail: (email: string, password: string) => Promise<any>;
   signUpWithEmail: (email: string, password: string, name?: string) => Promise<any>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<AppUser>) => Promise<any>;
 }
