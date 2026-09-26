@@ -1,6 +1,6 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-26 · Deployed to production from `main` @ `334ac81` (PR #3)
+Last updated: 2026-09-26 · Deployed to production from `main` @ `fbb111b` (PR #5)
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
@@ -69,48 +69,67 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | Incident submit hung while the location permission prompt was open | Location lookup capped at 6 s | PASS (saved with prompt unanswered; with permission → lat/lng stored) |
 | Stripe checkout failed with an opaque error when price and key are in different modes | Price validated first → `PRICE_UNAVAILABLE`/`PRICE_INACTIVE`; stale customer ids recreated | PASS (explicit error; see Billing) |
 
+### Commercialisation pass (PR #5)
+| Issue | Fix | Verified |
+|---|---|---|
+| Landing / pricing / login claimed 99.9% uptime, 24/7 support, 15% fuel savings, "<2s" updates, AI/ML ETA, offline mode, push notifications, DVSA/tachograph compliance, "TomTom partnership", "trusted by logistics companies" | Rewritten to describe real features only; ROI calculator uses the visitor's own estimates and says savings are not guaranteed; tachograph disclaimer in FAQ | PASS (production pages) |
+| "Start Free Trial" sent visitors to a **paid** Stripe checkout while promising "no card needed" | Trial CTAs open sign-up (`/login?mode=register`); new companies get the 14-day trial | PASS (production) |
+| Route planner + dashboard map showed **8 invented low bridges** and **wrong CAZ charges** (car ULEZ price for HGVs, a Manchester charging zone that does not exist) | Fake bridges removed (TomTom truck routing already uses vehicle height/weight); one shared UK charging-zone list, no amounts, links to GOV.UK | PASS (code + production UI) |
+| Dashboard "AI ETA Predictions" were hard-coded regions with fake confidence % | Real open jobs sorted by ETA + count of jobs past ETA | PASS (production) |
+| Dark (default) and satellite map styles pointed at TomTom styles that return **404** — only "Light" could load | Built-in `basic_night` / `hybrid_night` styles | PASS (no TomTom 4xx on production; map pixels not viewable headless) |
+| Dashboard had no main navigation; map below all lists on phones | Uses the app layout; map first on mobile | PASS (screenshots) |
+| Settings: 6 switches nothing read; fuel card styled for a light theme on the dark UI | Removed dead switches, CAZ preference now drives the map, fuel card themed; admins get "View plans and subscribe" | PASS |
+| Landing image captioned "Movido Dispatch Center Dashboard" was a stock trading-floor photo with Bloomberg branding; CTA image was an AI map with garbled place names | Both deleted; labelled dispatch illustration; social image → fleet photo | PASS |
+| Mixed-language link ("Odzyskaj konto"), "John Doe" placeholders, "Supabase" jargon in UI | Fixed | PASS |
+| Accessibility: 15 icon-only buttons without names, dead header bell, `maximum-scale=1` blocked zoom, CTAs were a button inside a link (two tab stops) | Named, bell opens Alerts, zoom allowed, `Button asChild` | PASS (automated check + keyboard walk) |
+| Stat grids of 4–5 columns and toolbars clipped at 390 px on 12 pages; job table wrapped references/badges | Responsive grids/toolbars, no-wrap cells | PASS (no horizontal overflow on 22 screens × 3 widths) |
+| Vercel: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, `RESEND_API_KEY` flagged "readable secret" | Converted to **Sensitive** (production + preview) | PASS (type = sensitive; deployment builds and runs) |
+
 ## PASS / FAIL / BLOCKED
 
 | Area | Status | Evidence |
 |---|---|---|
-| Authentication / session / RBAC | PASS | Browser (local build + production domain) |
-| RLS / organisation isolation (16 tables + storage + new tables/RPCs) | PASS | Rolled-back role probes: cross-org select/update/delete = 0; anon nothing; team RPCs cross-org → USER_NOT_FOUND; driver cannot insert positions directly; documents/POD storage org-scoped |
-| **Production: admin login, dashboard** | PASS | `www.movidologistics.uk` |
-| **Production: create job (stops, assigned driver)** | PASS | `JOB-2026-003`, `JOB-2026-004` created |
-| **Production: team page** | PASS | Only QA org members listed (no Movido users) |
-| **Production: driver login + GPS permission + position sent** | PASS | "Sharing live location · sent 12:56:17"; `driver_positions` rows |
-| **Production: start → deliver stop → POD photo + signature → complete** | PASS | "Delivery completed"; photo 47 550 bytes in private bucket |
-| **Production: driver marker on dispatch live map** | PASS | Marker element "QA Driver" on dashboard map |
-| **Production: POD view (signed photo)** | PASS | Image loaded from signed URL |
-| **Production: public tracking link** | PASS | Delivered state, no phone numbers; invalid token → "Tracking link not found or expired" |
-| Geofencing (server-side) | PASS | Arrival/departure events, dedupe, org isolation; runs whenever a driver's phone reports, dashboard not needed |
-| Background GPS (screen off / app closed) | **BLOCKED (platform)** | Browsers stop geolocation in the background; the driver screen says so. Needs a native app |
-| Messaging / Incidents / Fuel / Documents / Analytics / Reports | PASS | Browser, persisted, reload checked |
-| Map tile visuals | **BLOCKED** | Headless Chromium here renders WebGL black; markers verified in DOM |
-| Realtime websockets | **BLOCKED** here | Proxy blocks websockets; 15–20 s polling fallback verified |
-| Stripe: admin-only, org-bound, price allowlist (4 ids set) | PASS | Driver → 403; unknown price → INVALID_PRICE |
-| Stripe TEST checkout | **BLOCKED** | Supabase `STRIPE_SECRET_KEY` is a **test** key but the 4 price ids are **live** prices → `PRICE_UNAVAILABLE` |
-| Stripe signed webhook event / subscription record | **BLOCKED** | No access to the webhook secret / Stripe dashboard; unsigned & forged events → 400 |
-| TypeScript / build / deploy | PASS | `tsc` 0 errors; `vite build` OK; Vercel production READY, domain serves new bundle |
-| Leaked-password protection | **FAIL (config)** | Supabase Auth setting |
+| Authentication / session / RBAC / disabled accounts | PASS | Browser on production; rolled-back probe: disabled account sees 0 rows, cannot update |
+| RLS / organisation isolation (jobs, drivers, vehicles, documents, positions, geofence events, messages, maintenance, incidents, fuel, users, storage) | PASS | Rolled-back probe as another company's admin: all 0; update 0 rows; team RPC → USER_NOT_FOUND |
+| Driver restrictions | PASS | Other-org jobs 0, cannot update them, cannot file fuel as another driver, cannot insert positions directly, admin RPC → ADMIN_ONLY, documents 0 |
+| Anonymous / tracking links | PASS | anon jobs/users 0; bad/empty token → 0 rows; valid link shows status without phone number |
+| **Production E2E**: sign-up CTA, admin login, dashboard, create job, Team, driver login, GPS sent, start → deliver → photo + signature → complete, driver marker on map, POD view | PASS | `www.movidologistics.uk`, run after PR #5 (JOB-2026-005) |
+| **Production modules**: Analytics, Reports CSV, Incident, Fuel, Messaging (persists after reload), Document Scanner (OCR + saved), Settings plan link, ETA panel | PASS | Same run |
+| Geofencing (server-side, works without dashboard open) | PASS | Earlier pass, unchanged |
+| Map styles load | PASS | No TomTom 4xx on production after fix |
+| Map visuals (tiles/markers drawn) | **BLOCKED** | Headless Chromium here does not composite the WebGL canvas; check once in a normal browser |
+| Background GPS (screen off / browser closed) | **BLOCKED (platform)** | Browser limitation, stated on the driver screen and landing page; needs a native app. `movido-driver` (Expo) exists but is out of date with the schema |
+| Responsive (390 / 820 / 1440) | PASS | 22 screens: no horizontal overflow, no broken images |
+| Accessibility basics | PASS | Named controls, visible focus, zoom allowed, labelled dialogs/switches |
+| Marketing claims | PASS | Rewritten; see table above |
+| Stripe: admin-only, org-bound, allowlist, unauthenticated → 401 | PASS | Probes |
+| Stripe webhook rejects unsigned / forged | PASS | 400 / 400 |
+| **Stripe TEST or LIVE checkout, subscription, webhook event, cancellation, payment failure** | **BLOCKED** | Supabase `STRIPE_SECRET_KEY` is a **test** key while all four price ids are **live** prices → `PRICE_UNAVAILABLE`. Production is intended to bill live (live domain, live prices). Supabase function secrets cannot be read or set from here |
+| Trial / subscription enforcement | **Not enforced (business decision)** | States exist (`trial`, `active`, `past_due`, `cancelled`, set only by the webhook) and are shown in Settings; nothing blocks access. Movido's own org trial ended 2026-06-17, so enforcing now would lock it out |
+| Leaked-password protection | **BLOCKED** | Off. Requires Supabase **Pro** plan (org is on Free) and the Auth dashboard; no API access here |
+| Password recovery | PASS (no enumeration) / **BLOCKED** (delivery) | `/recover` returns identical `200 {}` for known and unknown emails; mail delivery needs custom SMTP (Supabase default mailer only sends to project team members) |
+| Privacy policy / terms | **Missing** | No pages exist; legal text must come from the business |
+| TypeScript / build / deploy | PASS | `tsc` 0 errors, `vite build` OK, Vercel production READY and serving the new bundle |
 
 ## Remaining work / needs the owner
 
-1. **Stripe**: put the secret key and webhook secret in the **same mode as the price ids** (live key +
-   live webhook secret, or create test prices and set those ids) in Supabase function secrets; point the
-   webhook at `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook`; run one checkout.
-2. **Trial expiry is not enforced** — business decision.
-3. Supabase Auth: enable leaked-password protection; configure custom SMTP.
-4. Vercel: mark `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, `RESEND_API_KEY` Sensitive (not used by the frontend).
-5. `movido-driver` repo commits a `.env`; Expo / driver-web apps are out of date — `/driver` is the supported driver client.
-6. Background location needs a native app (browser limitation).
-7. Marketing claims ("99.9% uptime", "24/7 support") and the sales mailbox must be backed by the business.
+1. **Stripe (blocks selling):** in Supabase → Edge Functions → Secrets set `STRIPE_SECRET_KEY` = your **live** secret key
+   (`sk_live_…`) and `STRIPE_WEBHOOK_SECRET` = the signing secret of a **live** webhook endpoint pointing at
+   `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook` with events `checkout.session.completed`,
+   `customer.subscription.created/updated/deleted`, `invoice.paid`, `invoice.payment_failed`. Keep the four
+   `STRIPE_PRICE_*` ids as they are (live). Check the annual prices match the page (£15 / £28 per vehicle per month billed annually).
+   Then run one real checkout with a card and cancel/refund it. (Alternative: create test-mode prices and put test ids + a test webhook secret in Supabase and `VITE_STRIPE_PRICE_*` in Vercel.)
+2. **Decide trial policy** (what happens when a trial ends or payment fails) before it is enforced.
+3. **Supabase Auth:** configure custom SMTP (e.g. Resend) so sign-up and recovery emails reach customers; enable leaked-password protection (Pro plan).
+4. **Legal:** publish a privacy policy and terms of service (UK GDPR: you process drivers' location data).
+5. Confirm the map renders in a normal browser (dark, light, satellite).
+6. Native app if background GPS is required.
 
 ## QA data left in production (isolated, safe to keep or delete)
 
 - Organisation "QA Isolated Haulage Ltd" (`a42e18f2-…1658`): 2 vehicles, 1 driver, jobs `JOB-2026-001…004`
-  (003's POD photo is a 0-byte test artifact from a harness bug, fixed before 004), driver positions,
-  geofence events, messages, incidents, fuel logs, 1 scanned document.
+  and 005 (003's POD photo is a 0-byte test artifact from a harness bug), driver positions,
+  geofence events, messages, incidents, fuel logs, 2 scanned documents.
 - Auth users `qa-admin@qa.movidologistics.uk` (admin) and `qa-driver@qa.movidologistics.uk` (driver).
 - Existing Movido data was not modified.
 
