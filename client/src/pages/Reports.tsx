@@ -63,14 +63,28 @@ export default function Reports() {
   const [reportName, setReportName] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const { vehicles } = useVehicles();
-  const { drivers } = useDrivers();
-  const { jobs } = useJobs();
-  const { maintenance } = useMaintenance();
-  const { incidents } = useIncidents();
-  const { fuelLogs } = useFuelLogs();
+  const v = useVehicles();
+  const dr = useDrivers();
+  const jb = useJobs();
+  const mt = useMaintenance();
+  const inc = useIncidents();
+  const fl = useFuelLogs();
+  const { vehicles } = v;
+  const { drivers } = dr;
+  const { jobs } = jb;
+  const { maintenance } = mt;
+  const { incidents } = inc;
+  const { fuelLogs } = fl;
+  // An export built from data that has not loaded (or failed to load) would
+  // silently be empty, so generating waits for — and reports — the loads.
+  const dataLoading = [v, dr, jb, mt, inc, fl].some((h) => h.isLoading);
+  const dataError = [v, dr, jb, mt, inc, fl].find((h) => h.error)?.error ?? null;
 
   const generateReport = useCallback(async () => {
+    if (dataError) {
+      toast.error("Some data could not be loaded — refresh the page and try again.");
+      return;
+    }
     const name = reportName.trim() || `${reportTypes.find((t) => t.value === selectedType)?.label} — ${new Date().toLocaleDateString("en-GB")}`;
     setIsGenerating(true);
 
@@ -220,7 +234,7 @@ export default function Reports() {
     setReportName("");
     setIsGenerating(false);
     toast.success(`Report generated: ${rows} rows`);
-  }, [selectedType, reportName, vehicles, drivers, jobs, maintenance, incidents, fuelLogs]);
+  }, [selectedType, reportName, vehicles, drivers, jobs, maintenance, incidents, fuelLogs, dataError]);
 
   const downloadReport = (report: GeneratedReport) => {
     const blob = new Blob([report.csvData], { type: "text/csv;charset=utf-8;" });
@@ -321,7 +335,7 @@ export default function Reports() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowGenerate(false)}>Cancel</Button>
-              <Button onClick={generateReport} disabled={isGenerating} className="glow-cyan-sm">{isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</> : <><FileText className="w-4 h-4 mr-2" />Generate</>}</Button>
+              <Button onClick={generateReport} disabled={isGenerating || dataLoading} className="glow-cyan-sm">{isGenerating || dataLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{dataLoading ? "Loading data..." : "Generating..."}</> : <><FileText className="w-4 h-4 mr-2" />Generate</>}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

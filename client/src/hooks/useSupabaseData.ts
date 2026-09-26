@@ -282,6 +282,7 @@ export function useJobs() {
 export function useMaintenance(vehicleId?: number) {
   const [data, setData] = useState<FleetMaintenance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     let query = supabase
@@ -293,16 +294,18 @@ export function useMaintenance(vehicleId?: number) {
       query = query.eq("vehicle_id", vehicleId);
     }
 
-    const { data: rows } = await query;
-    setData((rows || []) as FleetMaintenance[]);
+    const { data: rows, error: err } = await query;
     setIsLoading(false);
+    if (err) { setError(err.message); return; }
+    setError(null);
+    setData(rows ?? []);
   }, [vehicleId]);
 
   useEffect(() => {
     fetch();
   }, [fetch]);
 
-  return { maintenance: data, isLoading, refetch: fetch };
+  return { maintenance: data, isLoading, error, refetch: fetch };
 }
 
 // ============================================

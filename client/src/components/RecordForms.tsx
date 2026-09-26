@@ -82,9 +82,14 @@ export function LogIncidentDialog({ open, onOpenChange, drivers, vehicles, jobs,
     let lng: number | null = null;
     if (fixedDriverId && "geolocation" in navigator) {
       // Best effort: attach the driver's position if it is quickly available.
-      await new Promise<void>((resolve) => navigator.geolocation.getCurrentPosition(
-        (p) => { lat = p.coords.latitude; lng = p.coords.longitude; resolve(); },
-        () => resolve(), { timeout: 5000, maximumAge: 60000 }));
+      // The browser's own timeout does not run while a permission prompt is
+      // open, so cap the wait here as well.
+      await new Promise<void>((resolve) => {
+        const cap = window.setTimeout(resolve, 6000);
+        navigator.geolocation.getCurrentPosition(
+          (p) => { window.clearTimeout(cap); lat = p.coords.latitude; lng = p.coords.longitude; resolve(); },
+          () => { window.clearTimeout(cap); resolve(); }, { timeout: 5000, maximumAge: 60000 });
+      });
     }
     const { error } = await supabase.from("incidents").insert({
       driver_id: driver,

@@ -152,7 +152,7 @@ export default function DocumentScanner() {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
-    if (error || !data) return;
+    if (error || !data) { toast.error("Could not load saved documents"); return; }
     const { data: signed } = data.length
       ? await supabase.storage.from("documents").createSignedUrls(data.map((d) => d.storage_path), 3600)
       : { data: [] as { signedUrl: string | null }[] };
@@ -216,14 +216,21 @@ export default function DocumentScanner() {
         reader.readAsDataURL(file);
       };
 
-      if (existingScript || (window as any).Tesseract) {
+      if ((window as any).Tesseract) {
         doOCR();
+      } else if (existingScript) {
+        existingScript.addEventListener("load", doOCR, { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Failed to load Tesseract.js")), { once: true });
       } else {
         const script = document.createElement("script");
         script.id = "tesseract-script";
         script.src = "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js";
         script.onload = doOCR;
-        script.onerror = () => reject(new Error("Failed to load Tesseract.js"));
+        script.onerror = () => {
+          // Drop the failed tag so the next scan tries the download again.
+          script.remove();
+          reject(new Error("Failed to load Tesseract.js"));
+        };
         document.head.appendChild(script);
       }
     });

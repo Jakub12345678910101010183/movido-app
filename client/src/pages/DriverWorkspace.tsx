@@ -218,7 +218,7 @@ export default function DriverWorkspace() {
 
   useEffect(() => {
     // RLS returns only the caller's own driver record.
-    supabase.from("drivers").select("id, vehicle_id").maybeSingle()
+    void withRetry(() => supabase.from("drivers").select("id, vehicle_id").maybeSingle())
       .then(({ data }) => { if (data) setMe(data); });
   }, []);
 
@@ -227,12 +227,12 @@ export default function DriverWorkspace() {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
     // RLS returns only jobs assigned to this driver in their organisation.
-    const { data, error } = await supabase
+    const { data, error } = await withRetry(() => supabase
       .from("jobs")
       .select("*")
       .or(`status.in.(pending,assigned,in_progress),completed_at.gte.${since.toISOString()}`)
       .order("scheduled_date", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }), 3);
     setLoading(false);
     if (error) {
       setLoadError(true);
