@@ -230,7 +230,17 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    // If the server can't be reached (e.g. no signal), still sign this device
+    // out: a shared phone or office PC must not stay signed in. supabase-js
+    // keeps the session when its logout call fails, so drop it and reload.
+    if (error) {
+      try {
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+          .forEach((k) => localStorage.removeItem(k));
+      } catch { /* storage unavailable: nothing persisted to clear */ }
+      window.location.assign("/login");
+    }
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<AppUser>) => {
