@@ -1,6 +1,6 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-26 · Deployed to production from `main` @ `fbb111b` (PR #5)
+Last updated: 2026-09-26 · Deployed to production from `main` (PRs #7, #8 — pre-sale hardening)
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
@@ -85,57 +85,87 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | Stat grids of 4–5 columns and toolbars clipped at 390 px on 12 pages; job table wrapped references/badges | Responsive grids/toolbars, no-wrap cells | PASS (no horizontal overflow on 22 screens × 3 widths) |
 | Vercel: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, `RESEND_API_KEY` flagged "readable secret" | Converted to **Sensitive** (production + preview) | PASS (type = sensitive; deployment builds and runs) |
 
-## PASS / FAIL / BLOCKED
+### Pre-sale hardening (PRs #7, #8, migration 021)
+| Issue | Fix | Verified |
+|---|---|---|
+| **Open mail relay**: `send-verification-email` sent any address any link from `noreply@movidologistics.uk` using only the public anon key; nothing in the app used it | Retired (returns 410), unused client helper removed | PASS (production call → 410) |
+| **Tracking-link privacy**: a delivered job's link kept showing the driver's live position on later jobs; full driver name shown | Driver first name only; position only while that job is in progress; tokens < 32 chars rejected | PASS (DB probe + production page) |
+| **Driver "Delete" was a fake success**: no delete policy, UI said "Driver removed", driver reappeared | Deletable only with no jobs and no login; clear refusal message otherwise | PASS (production: refused with message, still listed) |
+| Deleting a driver cascaded away their fuel records | Fuel logs kept (driver set to NULL) | PASS (probe) |
+| Deleting a completed job destroyed the POD evidence and orphaned the photo in storage | Jobs with photo/signature cannot be deleted | PASS (probe) |
+| Refused deletes surfaced raw database errors | Every refusal explained (vehicles, drivers, jobs) | PASS |
+| **Sign-out failed silently offline**: device stayed signed in when the logout request failed | Local session always cleared | PASS (logout request forced to fail → signed out) |
+| No Privacy Policy / Terms | `/privacy`, `/terms` (drafts with OWNER TO CONFIRM placeholders), linked from footer, sign-up and company creation | PASS (pages live) — **legal review required** |
+| Trial state invisible to customers | Banner: days left / ended / payment failed / cancelled, plans link for admins; no lockout; `lib/subscription.ts` documents where enforcement must go (database) | PASS (new company shows "Free trial: 14 days left") |
+| Annual price displayed rounded (£15 instead of £15.20) | Exact figure + "20% off the monthly price" | PASS (code) |
+| Production error screen showed stack traces | Hidden in production, structured console line | PASS (code) |
+| 404 in light theme; canonical/structured data on the redirecting bare domain, claiming iOS/Android apps and AI; robots allowed tracking links | Themed 404; `www` canonical/sitemap; accurate JSON-LD; robots blocks `/track/`, `/driver`, auth pages | PASS (production) |
+
+## PASS / FAIL / BLOCKED / OWNER ACTION
 
 | Area | Status | Evidence |
 |---|---|---|
-| Authentication / session / RBAC / disabled accounts | PASS | Browser on production; rolled-back probe: disabled account sees 0 rows, cannot update |
-| RLS / organisation isolation (jobs, drivers, vehicles, documents, positions, geofence events, messages, maintenance, incidents, fuel, users, storage) | PASS | Rolled-back probe as another company's admin: all 0; update 0 rows; team RPC → USER_NOT_FOUND |
-| Driver restrictions | PASS | Other-org jobs 0, cannot update them, cannot file fuel as another driver, cannot insert positions directly, admin RPC → ADMIN_ONLY, documents 0 |
-| Anonymous / tracking links | PASS | anon jobs/users 0; bad/empty token → 0 rows; valid link shows status without phone number |
-| **Production E2E**: sign-up CTA, admin login, dashboard, create job, Team, driver login, GPS sent, start → deliver → photo + signature → complete, driver marker on map, POD view | PASS | `www.movidologistics.uk`, run after PR #5 (JOB-2026-005) |
-| **Production modules**: Analytics, Reports CSV, Incident, Fuel, Messaging (persists after reload), Document Scanner (OCR + saved), Settings plan link, ETA panel | PASS | Same run |
-| Geofencing (server-side, works without dashboard open) | PASS | Earlier pass, unchanged |
-| Map styles load | PASS | No TomTom 4xx on production after fix |
-| Map visuals (tiles/markers drawn) | **BLOCKED** | Headless Chromium here does not composite the WebGL canvas; check once in a normal browser |
-| Background GPS (screen off / browser closed) | **BLOCKED (platform)** | Browser limitation, stated on the driver screen and landing page; needs a native app. `movido-driver` (Expo) exists but is out of date with the schema |
-| Responsive (390 / 820 / 1440) | PASS | 22 screens: no horizontal overflow, no broken images |
-| Accessibility basics | PASS | Named controls, visible focus, zoom allowed, labelled dialogs/switches |
-| Marketing claims | PASS | Rewritten; see table above |
-| Stripe: admin-only, org-bound, allowlist, unauthenticated → 401 | PASS | Probes |
-| Stripe webhook rejects unsigned / forged | PASS | 400 / 400 |
-| **Stripe TEST or LIVE checkout, subscription, webhook event, cancellation, payment failure** | **BLOCKED** | Supabase `STRIPE_SECRET_KEY` is a **test** key while all four price ids are **live** prices → `PRICE_UNAVAILABLE`. Production is intended to bill live (live domain, live prices). Supabase function secrets cannot be read or set from here |
-| Trial / subscription enforcement | **Not enforced (business decision)** | States exist (`trial`, `active`, `past_due`, `cancelled`, set only by the webhook) and are shown in Settings; nothing blocks access. Movido's own org trial ended 2026-06-17, so enforcing now would lock it out |
-| Leaked-password protection | **BLOCKED** | Off. Requires Supabase **Pro** plan (org is on Free) and the Auth dashboard; no API access here |
-| Password recovery | PASS (no enumeration) / **BLOCKED** (delivery) | `/recover` returns identical `200 {}` for known and unknown emails; mail delivery needs custom SMTP (Supabase default mailer only sends to project team members) |
-| Privacy policy / terms | **Missing** | No pages exist; legal text must come from the business |
-| TypeScript / build / deploy | PASS | `tsc` 0 errors, `vite build` OK, Vercel production READY and serving the new bundle |
+| **New customer journey (production)**: landing → sign-up → email confirmation requested → company created → 14-day trial banner → add vehicle → add driver → job with 2 stops assigned → tracking link → Reports CSV → Pricing | PASS | New company "QA Journey 453159 Ltd"; email confirmation step done in DB for the test address (no mailbox) |
+| Driver workspace → GPS → deliver → POD → dispatch map → POD view | PASS | Production run on QA company (JOB-2026-005); the new company's driver could not accept an invitation without a mailbox |
+| Account lifecycle: pending → added by admin → access → disabled (refresh blocked; API returns 0 rows with old token) → re-enabled → sign out/in | PASS | Production, two browsers |
+| Customers | N/A | No separate customer records: the customer is captured on each job |
+| RLS / RBAC / organisation isolation / anon | PASS | Rolled-back probes (previous pass + 021 probes) |
+| Tracking links | PASS | 128-bit random tokens, invalid/short rejected, first name only, no phone/email, position only while in progress, correct status |
+| File uploads | PASS | Private buckets; POD 10 MB (jpeg/png/webp/heic), documents 20 MB (jpeg/png/webp/tiff); org-folder policies; random object names; signed URLs |
+| Abuse surfaces | PASS / OWNER ACTION | Open relay closed; invitations limited to one pending per driver and only to the driver's stored email; checkout admin-only; GPS history ≤ 1 row / 10 s per driver; login/sign-up/recovery rely on Supabase Auth rate limits (review values in Auth → Rate Limits) |
+| Recovery email | PASS (no enumeration) / **BLOCKED** (delivery) | Identical response for known/unknown emails; Supabase records confirmation emails as sent, but delivery could not be observed (no mailbox) |
+| Driver invitation email | **BLOCKED** | Needs a real mailbox; failure path shows "created but email could not be sent" |
+| Error observability | PASS (basic) | Edge Function, Postgres, API and Auth logs in Supabase; Vercel runtime logs; no alerting configured |
+| Production bundle secrets | PASS | Only the anon key; no `sk_`, `whsec_` or service-role key; price ids match the server allowlist |
+| HTTPS / headers | PASS | HSTS, X-Frame-Options DENY, nosniff, strict referrer policy; bare/.com domains redirect to www |
+| **Stripe checkout / subscription / webhook events** | **BLOCKED** | Test secret key with live price ids → "Online checkout is temporarily unavailable"; annual price amounts in Stripe not visible from here |
+| Trial enforcement | **OWNER ACTION** | Not enforced by design until the policy is decided |
+| Backups | **BLOCKED / OWNER ACTION** | Supabase organisation is on the Free plan: no downloadable daily backups or PITR. Verify in Dashboard → Database → Backups; Pro plan gives daily backups |
+| Leaked-password protection | **BLOCKED** | Pro plan + dashboard |
+| Privacy Policy / Terms | **OWNER ACTION (legal review)** | Drafts live with placeholders |
+| TomTom key restrictions | **OWNER ACTION** | Key is public in the browser by design; restrict it to `movidologistics.uk` domains in the TomTom developer portal |
+| Map visuals | **BLOCKED** (headless) | Styles load without errors; check once in a normal browser |
+| Background GPS | **BLOCKED (platform)** | Browser limitation, disclosed |
 
 ## Remaining work / needs the owner
 
-1. **Stripe (blocks selling):** in Supabase → Edge Functions → Secrets set `STRIPE_SECRET_KEY` = your **live** secret key
-   (`sk_live_…`) and `STRIPE_WEBHOOK_SECRET` = the signing secret of a **live** webhook endpoint pointing at
-   `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook` with events `checkout.session.completed`,
-   `customer.subscription.created/updated/deleted`, `invoice.paid`, `invoice.payment_failed`. Keep the four
-   `STRIPE_PRICE_*` ids as they are (live). Check the annual prices match the page (£15 / £28 per vehicle per month billed annually).
-   Then run one real checkout with a card and cancel/refund it. (Alternative: create test-mode prices and put test ids + a test webhook secret in Supabase and `VITE_STRIPE_PRICE_*` in Vercel.)
-2. **Decide trial policy** (what happens when a trial ends or payment fails) before it is enforced.
-3. **Supabase Auth:** configure custom SMTP (e.g. Resend) so sign-up and recovery emails reach customers; enable leaked-password protection (Pro plan).
-4. **Legal:** publish a privacy policy and terms of service (UK GDPR: you process drivers' location data).
-5. Confirm the map renders in a normal browser (dark, light, satellite).
-6. Native app if background GPS is required.
+1. **Stripe (blocks selling):** set live `STRIPE_SECRET_KEY` and live `STRIPE_WEBHOOK_SECRET` in Supabase function secrets; live webhook to
+   `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook` (events: checkout.session.completed,
+   customer.subscription.created/updated/deleted, invoice.paid, invoice.payment_failed). Confirm the live annual prices are
+   £182.40 (Starter) and £336 (Professional) per vehicle per year — the page shows 20% off monthly. Run one real checkout, then cancel/refund.
+2. **Legal:** complete every "OWNER TO CONFIRM" in `/privacy` and `/terms` (company number, address, retention periods, VAT,
+   cancellation/refunds, liability, governing law, ICO registration) and have them reviewed.
+3. **Trial policy:** decide what happens after the trial / failed payment; then enforce in the database.
+4. **Supabase:** move to Pro for backups and leaked-password protection; confirm SMTP (sender domain, SPF/DKIM) by signing up with a real mailbox;
+   check Auth rate limits and that Site URL / redirect URLs use `https://www.movidologistics.uk`.
+5. **TomTom:** restrict the API key to your domains.
+6. **Deletion policy:** decide retention for driver location history, POD and jobs, and how a customer's company is removed on request
+   (there is no self-service company deletion; it is done by us on request).
+7. Optional: error alerting (Supabase log alerts or a monitoring service).
+
+## QA data cleanup plan (not executed)
+
+Test data lives only in isolated companies; none of it is visible to other companies:
+- "QA Isolated Haulage Ltd" (`a42e18f2-…1658`) and "QA Journey 453159 Ltd" (`c09b89e6-…220c`), their users
+  (`qa-admin@`, `qa-driver@`, `qa-journey-453159@`, `qa-journey-staff-453159@qa.movidologistics.uk`), jobs, positions, events,
+  messages, incidents, fuel logs, documents and files under `<org id>/` in the `pod-photos` and `documents` buckets.
+- Two empty companies from early sign-ups, "dispatch Logistics" and "driver Logistics" (no users, no data).
+
+To remove, in one transaction as the service role: delete `incidents` and `fuel_logs` whose driver belongs to those companies;
+delete `storage.objects` in both buckets whose name starts with each company id; delete the `organizations` rows (cascades to
+jobs, drivers, vehicles, positions, events, messages, documents); delete the four `auth.users` above (their `public.users` rows
+go with them). Keep the Movido Logistics Ltd company untouched.
 
 ## QA data left in production (isolated, safe to keep or delete)
 
-- Organisation "QA Isolated Haulage Ltd" (`a42e18f2-…1658`): 2 vehicles, 1 driver, jobs `JOB-2026-001…004`
-  and 005 (003's POD photo is a 0-byte test artifact from a harness bug), driver positions,
-  geofence events, messages, incidents, fuel logs, 2 scanned documents.
-- Auth users `qa-admin@qa.movidologistics.uk` (admin) and `qa-driver@qa.movidologistics.uk` (driver).
-- Existing Movido data was not modified.
+See the cleanup plan above. The two journey test accounts had their e-mail confirmed directly in the database
+(data-only migrations `qa_confirm_journey_test_account`, `qa_confirm_journey_staff_account`) because no mailbox exists for
+`qa.movidologistics.uk`. Existing Movido Logistics Ltd data was not modified.
 
 ## Database changes (all in `supabase/migrations/`, applied to production)
 
 010 app_settings per org · 011 private POD storage · 012 onboarding + org policies ·
 013 NOT NULL integrity · 014 driver workflow · 015 per-org uniqueness · 016 driver maintenance read ·
-017 driver positions · 018 server geofencing · 019 team management · 020 incidents/fuel/documents.
-Edge Functions: `create-checkout-session` v12, `stripe-webhook` v6.
+017 driver positions · 018 server geofencing · 019 team management · 020 incidents/fuel/documents ·
+021 pre-launch safety (tracking privacy, guarded deletes).
+Edge Functions: `create-checkout-session` v12, `stripe-webhook` v6, `send-verification-email` retired (v3, 410).
