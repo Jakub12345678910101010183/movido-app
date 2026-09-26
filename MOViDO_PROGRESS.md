@@ -1,6 +1,6 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-26 · Branch `claude/new-session-7ppjph` (from `main` @ `439a497`)
+Last updated: 2026-09-26 · Deployed to production from `main` @ `334ac81` (PR #3)
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
@@ -14,8 +14,11 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 - **Real browser:** Playwright + Chromium against a local production build wired
   to the production Supabase project, using an isolated QA company
   ("QA Isolated Haulage Ltd") and two QA logins created for this purpose
-  (`qa-admin@…`, `qa-driver@qa.movidologistics.uk`, no e-mail sent). The
-  production domain itself could not be browsed from this environment.
+  (`qa-admin@…`, `qa-driver@qa.movidologistics.uk`, no e-mail sent).
+- **Production domain:** after deploy, the same Playwright flows were run against
+  `https://www.movidologistics.uk`. This environment's proxy drops Chromium's own
+  connections, so the browser's HTTP requests were relayed unchanged through Node
+  `fetch` (file uploads went directly from the browser).
 - **Live services:** TomTom truck routing and the Stripe webhook endpoint were
   called directly.
 
@@ -52,64 +55,68 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | Driver could insert maintenance but not read it | Driver SELECT for own vehicle (016) | PASS (probe) |
 | Stale hand-written DB types (29 TS errors on this branch, 53 on old main) | Types mirror production schema; status columns NOT NULL (013) | PASS (`tsc` 0 errors) |
 
+### Final push (migrations 017–020, PR #3)
+| Issue | Fix | Verified |
+|---|---|---|
+| Driver app never sent GPS; live map had no real data source | `/driver` shares browser geolocation (watchPosition, ≥15 s / ≥50 m, resend on failure, denied/unsupported states); `driver_report_location()` resolves org, driver, vehicle and active job in the DB; `driver_positions` history (017) | PASS: local build + production — "Sharing live location · sent", rows in `driver_positions`, driver marker on dispatch map |
+| Client-side geofencing only ran with the dashboard open and read wrong fields | Server-side geofencing in Postgres on every reported fix: pickup/stop/delivery arrival ≤150 m, departure >300 m, unique per job/target/event, stop marked arrived, pickup arrival starts job (018) | PASS (DB probes + browser: events listed in job detail; duplicates ignored; other org sees none) |
+| Admins could not see or manage their organisation's users | `/team` + `admin_set_user_role / admin_remove_user / admin_add_user` with DB checks (admin only, same org, not self, owner protected, last admin kept, driver accounts stay drivers), audit log; `disabled` role blocks dispatch (019) | PASS (browser + role probes incl. cross-org → USER_NOT_FOUND) |
+| Incidents / Fuel had no way to create records | Create forms for dispatch and drivers; RLS checks driver/vehicle/job are same-org, drivers file only as themselves (020) | PASS (browser, both roles, persisted) |
+| Document scanner kept results in memory only | Private `documents` bucket (org folders) + `documents` table; history reloads with signed URLs; failed OCR download retried | PASS (row + 94 KB object; visible after reload) |
+| Messaging was one-way / per-sender | Shared driver ↔ dispatch threads, driver Messages view | PASS (both directions in browser) |
+| Reports could generate an empty CSV before data loaded | Generate waits for all data; aborts with an error if a load failed | PASS (jobs CSV with rows) |
+| Analytics "on-time" was not computed | Completed within 15 min of ETA | PASS (browser) |
+| Incident submit hung while the location permission prompt was open | Location lookup capped at 6 s | PASS (saved with prompt unanswered; with permission → lat/lng stored) |
+| Stripe checkout failed with an opaque error when price and key are in different modes | Price validated first → `PRICE_UNAVAILABLE`/`PRICE_INACTIVE`; stale customer ids recreated | PASS (explicit error; see Billing) |
+
 ## PASS / FAIL / BLOCKED
 
 | Area | Status | Evidence |
 |---|---|---|
-| Authentication (login, invalid credentials, gates) | PASS | Browser: wrong password → "Invalid login credentials"; `/dashboard /jobs /driver /settings` → login when signed out |
-| Session persistence / refresh | PASS | Reloads kept the session in every browser run |
-| RBAC | PASS | Driver login lands on `/driver`; `/jobs` redirects back to `/driver` |
-| RLS / organisation isolation | PASS | Role probes: cross-org select/update/delete = 0 on drivers, vehicles, jobs, messages, maintenance, storage; anon sees nothing; self-promotion blocked |
-| Onboarding (new company) | PASS | Browser |
-| Vehicles create | PASS | Browser 201, listed, persisted |
-| Drivers create | PASS | Browser, persisted |
-| Jobs create / 8 stops / assign / persist | PASS | Browser 201; DB row verified |
-| More than 8 stops | PASS | 10-stop job via RLS as admin; driver RPC handled index 9 |
-| Driver workflow (start → 8 stops → POD photo + signature → complete) | PASS | Browser at 390px; DB: 8/8 stops, completed_at, photo in private bucket, signature |
-| POD viewing (dispatcher) | PASS | Signed URL image loaded; public URL rejected |
-| Customer tracking | PASS | Browser; no phone numbers; completed state |
-| Routing (TomTom truck, height/weight, traffic) | PASS | Live API call returned route + traffic fields |
-| CSV export (jobs) | PASS | Browser download |
-| TypeScript / build | PASS | `tsc` 0 errors; `vite build` OK |
-| Stripe webhook signature rejection | PASS | Unsigned → 400, forged → 400 (proves secrets are set) |
-| Stripe paid checkout / signed webhook event / subscription record | **BLOCKED** | Needs Stripe test-mode access (or the webhook secret) and the price ids set as Supabase function secrets |
-| Live GPS tracking / geofencing on real devices | **BLOCKED** | Needs a driver device sharing location; web workspace does not yet send GPS |
-| Realtime updates | **BLOCKED** | Websockets are blocked by this environment's proxy |
-| Messaging, Incidents, Fuel, Document Scanner, Analytics, Reports | Not re-tested in browser this pass | RLS isolation for messages verified; pages load |
-| Production domain smoke test after deploy | **BLOCKED** from here | Environment cannot browse `movidologistics.uk`; verify with the checklist below |
-| Leaked-password protection | **FAIL (config)** | Supabase Auth setting — enable in dashboard |
+| Authentication / session / RBAC | PASS | Browser (local build + production domain) |
+| RLS / organisation isolation (16 tables + storage + new tables/RPCs) | PASS | Rolled-back role probes: cross-org select/update/delete = 0; anon nothing; team RPCs cross-org → USER_NOT_FOUND; driver cannot insert positions directly; documents/POD storage org-scoped |
+| **Production: admin login, dashboard** | PASS | `www.movidologistics.uk` |
+| **Production: create job (stops, assigned driver)** | PASS | `JOB-2026-003`, `JOB-2026-004` created |
+| **Production: team page** | PASS | Only QA org members listed (no Movido users) |
+| **Production: driver login + GPS permission + position sent** | PASS | "Sharing live location · sent 12:56:17"; `driver_positions` rows |
+| **Production: start → deliver stop → POD photo + signature → complete** | PASS | "Delivery completed"; photo 47 550 bytes in private bucket |
+| **Production: driver marker on dispatch live map** | PASS | Marker element "QA Driver" on dashboard map |
+| **Production: POD view (signed photo)** | PASS | Image loaded from signed URL |
+| **Production: public tracking link** | PASS | Delivered state, no phone numbers; invalid token → "Tracking link not found or expired" |
+| Geofencing (server-side) | PASS | Arrival/departure events, dedupe, org isolation; runs whenever a driver's phone reports, dashboard not needed |
+| Background GPS (screen off / app closed) | **BLOCKED (platform)** | Browsers stop geolocation in the background; the driver screen says so. Needs a native app |
+| Messaging / Incidents / Fuel / Documents / Analytics / Reports | PASS | Browser, persisted, reload checked |
+| Map tile visuals | **BLOCKED** | Headless Chromium here renders WebGL black; markers verified in DOM |
+| Realtime websockets | **BLOCKED** here | Proxy blocks websockets; 15–20 s polling fallback verified |
+| Stripe: admin-only, org-bound, price allowlist (4 ids set) | PASS | Driver → 403; unknown price → INVALID_PRICE |
+| Stripe TEST checkout | **BLOCKED** | Supabase `STRIPE_SECRET_KEY` is a **test** key but the 4 price ids are **live** prices → `PRICE_UNAVAILABLE` |
+| Stripe signed webhook event / subscription record | **BLOCKED** | No access to the webhook secret / Stripe dashboard; unsigned & forged events → 400 |
+| TypeScript / build / deploy | PASS | `tsc` 0 errors; `vite build` OK; Vercel production READY, domain serves new bundle |
+| Leaked-password protection | **FAIL (config)** | Supabase Auth setting |
 
-## Remaining work / known gaps
+## Remaining work / needs the owner
 
-1. **Billing end-to-end**: set `STRIPE_PRICE_STARTER_MONTHLY/ANNUAL`, `STRIPE_PRICE_PRO_MONTHLY/ANNUAL`
-   as **Supabase function secrets** (checkout returns `BILLING_NOT_CONFIGURED` otherwise), point the
-   Stripe webhook at `/functions/v1/stripe-webhook`, then run one test-mode checkout.
-2. **Trial expiry is not enforced** — `trial_ends_at` is stored and shown, nothing blocks access afterwards. Business decision (the Movido org itself is past its original trial date).
-3. **Driver GPS**: the driver workspace does not push location; live map positions depend on data
-   that is not being produced by any deployed client.
-4. The Expo app (`movido-driver`) and `movido-driver-web` are out of date with the schema and are
-   not deployed; treat `/driver` as the supported driver client or rebuild them against the current schema.
-5. Admins cannot list/manage their organisation's users (users RLS = own row only).
-6. Supabase Auth: enable leaked-password protection; configure custom SMTP for reliable recovery mail.
-7. Vercel flags `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, `RESEND_API_KEY` as
-   readable secrets — mark them Sensitive (they are not needed by the Vite frontend at all).
-8. `movido-driver` repo commits a `.env` (anon key + TomTom key — client-side keys, but should not be committed).
+1. **Stripe**: put the secret key and webhook secret in the **same mode as the price ids** (live key +
+   live webhook secret, or create test prices and set those ids) in Supabase function secrets; point the
+   webhook at `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook`; run one checkout.
+2. **Trial expiry is not enforced** — business decision.
+3. Supabase Auth: enable leaked-password protection; configure custom SMTP.
+4. Vercel: mark `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DATABASE_URL`, `RESEND_API_KEY` Sensitive (not used by the frontend).
+5. `movido-driver` repo commits a `.env`; Expo / driver-web apps are out of date — `/driver` is the supported driver client.
+6. Background location needs a native app (browser limitation).
+7. Marketing claims ("99.9% uptime", "24/7 support") and the sales mailbox must be backed by the business.
 
 ## QA data left in production (isolated, safe to keep or delete)
 
-- Organisation "QA Isolated Haulage Ltd" with 2 vehicles, 1 driver, 1 completed job (+ 1 POD photo).
+- Organisation "QA Isolated Haulage Ltd" (`a42e18f2-…1658`): 2 vehicles, 1 driver, jobs `JOB-2026-001…004`
+  (003's POD photo is a 0-byte test artifact from a harness bug, fixed before 004), driver positions,
+  geofence events, messages, incidents, fuel logs, 1 scanned document.
 - Auth users `qa-admin@qa.movidologistics.uk` (admin) and `qa-driver@qa.movidologistics.uk` (driver).
-- Existing Movido data (6 drivers, 8 vehicles, 10 jobs) was not modified.
+- Existing Movido data was not modified.
 
 ## Database changes (all in `supabase/migrations/`, applied to production)
 
 010 app_settings per org · 011 private POD storage · 012 onboarding + org policies ·
-013 NOT NULL integrity · 014 driver workflow · 015 per-org uniqueness · 016 driver maintenance read.
-Edge Functions deployed: `create-checkout-session` v11, `stripe-webhook` v6.
-
-## Post-deploy checklist (production)
-
-1. Sign in as the Movido admin → Dashboard, Jobs, Settings show Movido data and the real company name.
-2. Create a job with several stops, reload, confirm it persists.
-3. Sign in as a driver → lands on `/driver`, can start a job, mark stops, complete with photo.
-4. Open a job's tracking link in a private window.
+013 NOT NULL integrity · 014 driver workflow · 015 per-org uniqueness · 016 driver maintenance read ·
+017 driver positions · 018 server geofencing · 019 team management · 020 incidents/fuel/documents.
+Edge Functions: `create-checkout-session` v12, `stripe-webhook` v6.
