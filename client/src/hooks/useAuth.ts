@@ -171,11 +171,15 @@ export function useAuth() {
     void (async () => {
       // A transient network failure must not look like "no role": retry a
       // request that failed before giving up. A missing row is not retried.
-      let { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
+      // Each attempt is bounded so a hung request becomes a retryable error.
+      const readProfile = () =>
+        supabase.from("users").select("*").eq("id", userId)
+          .abortSignal(AbortSignal.timeout(8000)).maybeSingle();
+      let { data, error } = await readProfile();
       for (let attempt = 1; error && attempt <= 3 && active; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
         if (!active) return;
-        ({ data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle());
+        ({ data, error } = await readProfile());
       }
 
       if (!active) return;

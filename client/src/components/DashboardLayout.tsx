@@ -34,6 +34,7 @@ import {
   ScanLine,
   ClipboardList,
   Sparkles,
+  Menu,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -67,6 +68,9 @@ const navItems = [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  // Below md the sidebar is an off-canvas drawer.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => setMobileOpen(false), [location]);
   const { profile, signOut } = useAuthContext();
   // No fabricated counters: badges only render when a real count is wired in.
   const alertCount = 0;
@@ -95,11 +99,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-terminal flex">
+      {mobileOpen && (
+        <div className="fixed inset-0 z-30 bg-black/60 md:hidden" aria-hidden="true" onClick={() => setMobileOpen(false)} />
+      )}
       {/* Sidebar */}
       <aside
         className={`${
-          collapsed ? "w-16" : "w-56"
-        } border-r border-border bg-card/50 flex flex-col transition-all duration-300`}
+          collapsed ? "md:w-16" : "md:w-56"
+        } w-64 fixed inset-y-0 left-0 z-40 md:static md:z-auto ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 border-r border-border bg-card md:bg-card/50 flex flex-col transition-all duration-300`}
       >
         {/* Logo */}
         <div className="h-14 border-b border-border flex items-center justify-between px-3">
@@ -116,7 +125,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 hidden md:inline-flex"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setCollapsed(!collapsed)}
           >
             {collapsed ? (
@@ -206,9 +216,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="h-14 border-b border-border bg-card/50 flex items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <div className="relative">
+        <header className="h-14 border-b border-border bg-card/50 flex items-center justify-between gap-2 px-3 md:px-4">
+          <div className="flex items-center gap-2 md:gap-4 min-w-0">
+            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+              <Menu className="w-5 h-5" />
+            </Button>
+            <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="search"
@@ -221,13 +234,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   }
                 }}
                 placeholder="Search jobs by reference, customer, address..."
-                className="w-80 h-9 pl-9 pr-4 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50"
+                className="w-64 lg:w-80 h-9 pl-9 pr-4 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground font-mono">
+            <span className="hidden sm:inline text-xs text-muted-foreground font-mono">
               {currentTime}
             </span>
 
@@ -274,7 +287,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               }}
             >
               <Sparkles className="w-3.5 h-3.5 text-white" style={{ flexShrink: 0 }} />
-              <span>AI Planner</span>
+              <span className="hidden sm:inline">AI Planner</span>
               {aiSuggestions > 0 && (
                 <span
                   style={{

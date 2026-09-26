@@ -28,7 +28,8 @@ function useRealtimeTable<T extends { id: number | string }>(
 
   const fetch = useCallback(async () => {
     try {
-      const load = () => supabase.from(table).select("*").order(orderBy, { ascending: false });
+      const load = () => supabase.from(table).select("*").order(orderBy, { ascending: false })
+        .abortSignal(AbortSignal.timeout(15000));
       let { data: rows, error: err } = await load();
       // Retry transient network failures before showing an empty list.
       for (let attempt = 1; err && attempt <= 2; attempt++) {

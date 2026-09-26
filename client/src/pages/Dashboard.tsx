@@ -61,10 +61,10 @@ export default function Dashboard() {
   const [showAIDispatcher, setShowAIDispatcher] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [exportingRoute, setExportingRoute] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB"));
+  const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", timeZoneName: "short" }));
 
   useEffect(() => {
-    const tick = setInterval(() => setCurrentTime(new Date().toLocaleTimeString("en-GB")), 1000);
+    const tick = setInterval(() => setCurrentTime(new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", timeZoneName: "short" })), 1000);
     return () => clearInterval(tick);
   }, []);
 
@@ -191,9 +191,9 @@ export default function Dashboard() {
         </Link>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 lg:overflow-hidden">
       {/* LEFT SIDEBAR */}
-      <aside className="w-80 border-r border-border bg-card/50 flex flex-col">
+      <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-border bg-card/50 flex flex-col">
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <Link href="/"><div className="flex items-center gap-2 cursor-pointer"><div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Truck className="w-4 h-4 text-primary" /></div><span className="font-bold tracking-tight">MOVIDO</span></div></Link>
@@ -297,14 +297,14 @@ export default function Dashboard() {
       </aside>
 
       {/* MAIN — TomTom Map */}
-      <main className="flex-1 flex flex-col">
-        <header className="h-14 border-b border-border bg-card/50 flex items-center justify-between px-4">
-          <div className="flex items-center gap-4">
+      <main className="flex-1 flex flex-col min-w-0 min-h-[70vh] lg:min-h-0">
+        <header className="min-h-14 py-2 border-b border-border bg-card/50 flex flex-wrap items-center justify-between gap-2 px-4">
+          <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <h1 className="font-semibold">Dispatch Center</h1>
-            <span className="text-xs text-muted-foreground font-mono">{currentTime} GMT · Live</span>
+            <span className="text-xs text-muted-foreground font-mono">{currentTime}</span>
             {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-red-500"><WifiOff className="w-3 h-3" /> Offline</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1 md:gap-2">
             <Button variant="ghost" size="sm" className={mapStyle === "night" ? "text-primary" : ""} onClick={() => setMapStyle("night")}><MapIcon className="w-4 h-4 mr-1" />Dark</Button>
             <Button variant="ghost" size="sm" className={mapStyle === "main" ? "text-primary" : ""} onClick={() => setMapStyle("main")}><MapIcon className="w-4 h-4 mr-1" />Light</Button>
             <Button variant="ghost" size="sm" className={mapStyle === "satellite" ? "text-primary" : ""} onClick={() => setMapStyle("satellite")}><Satellite className="w-4 h-4 mr-1" />Satellite</Button>
@@ -350,7 +350,7 @@ export default function Dashboard() {
       </main>
 
       {/* RIGHT SIDEBAR — Stats */}
-      <aside className="w-64 border-l border-border bg-card/50 p-4 flex flex-col">
+      <aside className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-border bg-card/50 p-4 flex flex-col">
         <h3 className="font-semibold text-sm mb-4">Fleet Statistics</h3>
         <div className="space-y-4 flex-1">
           <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Truck className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Active Vehicles</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeVehicleCount}/{vehicles.length}</p></div>
@@ -360,7 +360,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-1"><div className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">ETA Predictions</span></div><ChevronRight className="w-4 h-4 text-muted-foreground" /></div>
             <p className="text-xs text-primary mt-1">Click for AI predictions →</p>
           </div>
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30"><div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-xs text-amber-500">Active Alerts</span></div><p className="text-2xl font-mono font-bold text-amber-500">{(showHGVLayers ? lowBridges.length : 0) + (showCAZLayers ? cazZones.length : 0)}</p></div>
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30"><div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-xs text-amber-500">Map hazards shown</span></div><p className="text-2xl font-mono font-bold text-amber-500">{(showHGVLayers ? lowBridges.length : 0) + (showCAZLayers ? cazZones.length : 0)}</p></div>
         </div>
         <div className="mt-6 pt-6 border-t border-border space-y-2">
           <Button className="w-full" variant="outline" size="sm" onClick={() => { refetchVehicles(); refetchJobs(); toast.success("Data refreshed"); }}><RefreshCw className="w-4 h-4 mr-2" />Refresh Data</Button>
