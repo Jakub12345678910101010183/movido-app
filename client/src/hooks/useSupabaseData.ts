@@ -309,60 +309,70 @@ export function useMaintenance(vehicleId?: number) {
 // MESSAGES (realtime)
 // ============================================
 
+/**
+ * Messages visible to the caller. RLS decides the scope: dispatch/admin see
+ * the organisation's whole message log (a shared dispatch inbox), a driver
+ * sees what they sent, what was sent to them and broadcasts.
+ * Recipients: a user id, "dispatch" (the dispatch team) or "broadcast".
+ */
 export function useMessages(currentUserId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     if (!currentUserId) { setIsLoading(false); return; }
-    setIsLoading(true);
-    const { data: rows } = await supabase
+    const { data: rows, error: err } = await supabase
       .from("messages")
       .select("*")
-      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
-      .order("created_at", { ascending: true })
-      .limit(500);
-    setMessages((rows || []) as Message[]);
+      .order("created_at", { ascending: false })
+      .limit(500)
+      .abortSignal(AbortSignal.timeout(15000));
     setIsLoading(false);
+    if (err) { setError(err.message); return; }
+    setError(null);
+    setMessages((rows ?? []).reverse());
   }, [currentUserId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { void fetch(); }, [fetch]);
 
-  // Realtime subscription
+  // Realtime for instant delivery, polling as the fallback when websockets
+  // are unavailable.
   useEffect(() => {
     if (!currentUserId) return;
+    const poll = setInterval(() => { void fetch(); }, 15000);
     const channel = supabase
-      .channel("messages-realtime")
+      .channel(`messages-${currentUserId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         const msg = payload.new as Message;
-        if (msg.sender_id === currentUserId || msg.recipient_id === currentUserId) {
-          setMessages((prev) => [...prev, msg]);
-        }
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [currentUserId]);
+    return () => { clearInterval(poll); supabase.removeChannel(channel); };
+  }, [currentUserId, fetch]);
 
   const send = useCallback(async (data: {
-    recipient_id: string | null;
+    recipient_id: string;
     content: string;
     channel?: Message["channel"];
   }) => {
     if (!currentUserId) throw new Error("Not authenticated");
-    const { error } = await supabase.from("messages").insert({
+    const { data: row, error: err } = await supabase.from("messages").insert({
       sender_id: currentUserId,
       recipient_id: data.recipient_id,
       content: data.content,
       channel: data.channel || "dispatch",
-    });
-    if (error) throw error;
+    }).select().single();
+    if (err) throw err;
+    if (row) setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
   }, [currentUserId]);
 
   const markAsRead = useCallback(async (messageId: number) => {
-    await supabase.from("messages").update({ read: true }).eq("id", messageId);
+    const { error: err } = await supabase.from("messages").update({ read: true }).eq("id", messageId);
+    if (!err) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, read: true } : m)));
   }, []);
 
-  return { messages, isLoading, refetch: fetch, send, markAsRead };
+  return { messages, isLoading, error, refetch: fetch, send, markAsRead };
 }
 
 // ============================================

@@ -273,6 +273,20 @@ type GeofenceEventRow = {
   occurred_at: string;
 };
 
+type DocumentRow = {
+  id: string;
+  organization_id: string;
+  uploaded_by: string | null;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
+  ocr_text: string | null;
+  ocr_confidence: number | null;
+  fields: Json;
+  created_at: string;
+};
+
 type TrackingRow = {
   reference: string;
   customer: string;
@@ -300,6 +314,7 @@ export type Database = {
       audit_log: TableDef<AuditLogRow, "action" | "resource_type">;
       driver_invitations: TableDef<DriverInvitationRow, "organization_id" | "driver_id" | "email" | "token_hash" | "expires_at">;
       drivers: TableDef<DriverRow, "name">;
+      documents: TableDef<DocumentRow, "organization_id" | "filename" | "mime_type" | "size_bytes" | "storage_path">;
       geofence_events: TableDef<GeofenceEventRow, "organization_id" | "job_id" | "driver_id" | "target" | "event_type" | "lat" | "lng" | "distance_m">;
       driver_positions: TableDef<DriverPositionRow, "organization_id" | "driver_id" | "lat" | "lng">;
       fleet_maintenance: TableDef<FleetMaintenanceRow, "vehicle_id" | "type" | "scheduled_date">;

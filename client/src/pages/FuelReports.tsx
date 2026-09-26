@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { useFuelLogs } from "@/hooks/useSupabaseData";
 import { useDrivers, useVehicles } from "@/hooks/useSupabaseData";
+import { LogFuelDialog } from "@/components/RecordForms";
 import type { FuelLog } from "@/lib/database.types";
 
 // ============================================
@@ -44,6 +45,7 @@ export default function FuelReports() {
   const { drivers } = useDrivers();
   const { vehicles } = useVehicles();
 
+  const [showLog, setShowLog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [driverFilter, setDriverFilter] = useState("all");
   const [fuelTypeFilter, setFuelTypeFilter] = useState("all");
@@ -95,10 +97,22 @@ export default function FuelReports() {
               Fleet fuel consumption &amp; cost analysis
             </p>
           </div>
-          <Button variant="outline" size="icon" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowLog(true)}>
+              <Fuel className="w-4 h-4 mr-2" />Log fuel
+            </Button>
+            <Button variant="outline" size="icon" aria-label="Refresh fuel logs" onClick={() => refetch()}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
+        <LogFuelDialog
+          open={showLog}
+          onOpenChange={setShowLog}
+          drivers={drivers.map((d) => ({ id: d.id, label: d.name }))}
+          vehicles={vehicles.map((v) => ({ id: v.id, label: v.vehicle_id }))}
+          onSaved={() => refetch()}
+        />
 
         {/* Top stats */}
         <div className="grid grid-cols-4 gap-4 mb-6">

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Truck, MapPin, Navigation, CheckCircle2, Circle, Loader2, Camera, PenLine,
-  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag, LocateFixed, LocateOff,
+  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag, LocateFixed, LocateOff, MessageSquare, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { Job } from "@/lib/database.types";
+import { useMessages } from "@/hooks/useSupabaseData";
+import { LogIncidentDialog, LogFuelDialog } from "@/components/RecordForms";
 
 type StopStatus = "pending" | "arrived" | "completed";
 type Stop = { label: string; address: string; status: StopStatus };
@@ -209,6 +211,16 @@ export default function DriverWorkspace() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
+  const [showMessages, setShowMessages] = useState(false);
+  const [me, setMe] = useState<{ id: number; vehicle_id: number | null } | null>(null);
+  const [showIncident, setShowIncident] = useState(false);
+  const [showFuel, setShowFuel] = useState(false);
+
+  useEffect(() => {
+    // RLS returns only the caller's own driver record.
+    supabase.from("drivers").select("id, vehicle_id").maybeSingle()
+      .then(({ data }) => { if (data) setMe(data); });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,19 +254,22 @@ export default function DriverWorkspace() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2 min-w-0">
-          {openJob ? (
-            <Button variant="ghost" size="icon" aria-label="Back to my jobs" onClick={() => setOpenJobId(null)}>
+          {openJob || showMessages ? (
+            <Button variant="ghost" size="icon" aria-label="Back to my jobs" onClick={() => { setOpenJobId(null); setShowMessages(false); }}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
           ) : (
             <Truck className="w-6 h-6 text-primary shrink-0" />
           )}
           <div className="min-w-0">
-            <p className="font-semibold truncate">{openJob ? openJob.reference : "My jobs"}</p>
+            <p className="font-semibold truncate">{showMessages ? "Messages" : openJob ? openJob.reference : "My jobs"}</p>
             <p className="text-xs text-muted-foreground truncate">{profile?.name ?? profile?.email}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label="Messages" onClick={() => { setShowMessages(true); setOpenJobId(null); }}>
+            <MessageSquare className="w-5 h-5" />
+          </Button>
           <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => void load()}>
             <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -266,7 +281,9 @@ export default function DriverWorkspace() {
 
       <main className="mx-auto max-w-xl p-4 space-y-4">
         <LocationBanner sharing={sharing} />
-        {openJob ? (
+        {showMessages ? (
+          <DriverMessages userId={profile?.id} />
+        ) : openJob ? (
           <JobDetail
             job={openJob}
             onChanged={load}
@@ -293,6 +310,12 @@ export default function DriverWorkspace() {
                 <JobCard key={job.id} job={job} onOpen={() => setOpenJobId(job.id)} />
               ))}
             </section>
+            {me && (
+              <section className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => setShowIncident(true)}>Report incident</Button>
+                <Button variant="outline" onClick={() => setShowFuel(true)}>Log fuel</Button>
+              </section>
+            )}
             {done.length > 0 && (
               <section className="space-y-3">
                 <h2 className="text-sm font-medium text-muted-foreground">Completed today ({done.length})</h2>
@@ -304,6 +327,18 @@ export default function DriverWorkspace() {
           </div>
         )}
       </main>
+      {me && (
+        <>
+          <LogIncidentDialog
+            open={showIncident}
+            onOpenChange={setShowIncident}
+            fixedDriverId={me.id}
+            defaultVehicleId={me.vehicle_id}
+            defaultJobId={active.find((j) => j.status === "in_progress")?.id ?? null}
+          />
+          <LogFuelDialog open={showFuel} onOpenChange={setShowFuel} fixedDriverId={me.id} defaultVehicleId={me.vehicle_id} />
+        </>
+      )}
     </div>
   );
 }
@@ -597,6 +632,72 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={submit} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Complete delivery
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Driver ↔ dispatch messages. Sent to "dispatch" so any dispatcher can answer. */
+function DriverMessages({ userId }: { userId: string | undefined }) {
+  const { messages, isLoading, error, send } = useMessages(userId);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    try {
+      await send({ recipient_id: "dispatch", content: text.trim(), channel: "driver" });
+      setText("");
+    } catch {
+      toast.error("Message not sent — check your connection and try again");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border bg-card p-3 space-y-2 max-h-[55vh] overflow-y-auto">
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />
+        ) : error && messages.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center">Messages could not be loaded.</p>
+        ) : messages.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No messages yet. Write to dispatch below.</p>
+        ) : (
+          messages.map((m) => {
+            const mine = m.sender_id === userId;
+            return (
+              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary/20" : m.recipient_id === "broadcast" ? "bg-amber-500/15" : "bg-muted/40"}`}>
+                  {!mine && <p className="text-[10px] uppercase text-muted-foreground">{m.recipient_id === "broadcast" ? "Broadcast" : "Dispatch"}</p>}
+                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  <p className="text-[10px] text-muted-foreground text-right mt-0.5">
+                    {new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={endRef} />
+      </div>
+      <div className="flex gap-2">
+        <Input
+          aria-label="Message to dispatch"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
+          placeholder="Message dispatch…"
+          maxLength={1000}
+        />
+        <Button onClick={() => void submit()} disabled={sending || !text.trim()} aria-label="Send message">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>
       </div>
     </div>

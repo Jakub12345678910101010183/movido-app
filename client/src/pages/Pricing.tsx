@@ -142,7 +142,7 @@ export default function Pricing() {
         toast.error(
           code === "ADMIN_ONLY"
             ? "Only your company's administrator can start a subscription."
-            : code === "BILLING_NOT_CONFIGURED"
+            : code === "BILLING_NOT_CONFIGURED" || code === "PRICE_UNAVAILABLE" || code === "PRICE_INACTIVE"
               ? "Online checkout is temporarily unavailable — please contact sales."
               : "Checkout could not be started. Please try again.",
         );

@@ -8,10 +8,13 @@
  * - AI field extraction: Reference, Customer, Addresses, Dates, Weights
  * - Copy extracted text / auto-fill job from scan
  * - Scan history (last 10, stored in memory)
- * - PDF & image support
+ * - Image support (JPG, PNG, WebP, TIFF). Scans are stored per organisation
+ *   in the private "documents" bucket with their OCR text and fields.
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuthContext } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +44,8 @@ interface ExtractedFields {
 
 interface ScanResult {
   id: string;
+  saved: boolean;
+  storagePath?: string;
   filename: string;
   imageUrl: string;
   rawText: string;
@@ -139,6 +144,45 @@ export default function DocumentScanner() {
   const [activeTab, setActiveTab] = useState<"scanner" | "history">("scanner");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { profile } = useAuthContext();
+
+  const loadHistory = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error || !data) return;
+    const { data: signed } = data.length
+      ? await supabase.storage.from("documents").createSignedUrls(data.map((d) => d.storage_path), 3600)
+      : { data: [] as { signedUrl: string | null }[] };
+    setHistory(data.map((d, i) => ({
+      id: d.id,
+      saved: true,
+      storagePath: d.storage_path,
+      filename: d.filename,
+      imageUrl: signed?.[i]?.signedUrl ?? "",
+      rawText: d.ocr_text ?? "",
+      fields: (d.fields && typeof d.fields === "object" && !Array.isArray(d.fields) ? d.fields : {}) as ExtractedFields,
+      confidence: d.ocr_confidence ?? 0,
+      scannedAt: new Date(d.created_at),
+    })));
+  }, []);
+
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
+
+  const deleteScan = async (scan: ScanResult) => {
+    if (!scan.saved || !scan.storagePath) {
+      setHistory((prev) => prev.filter((h) => h.id !== scan.id));
+      return;
+    }
+    const { error } = await supabase.from("documents").delete().eq("id", scan.id);
+    if (error) { toast.error("Could not delete the document"); return; }
+    await supabase.storage.from("documents").remove([scan.storagePath]);
+    setHistory((prev) => prev.filter((h) => h.id !== scan.id));
+    if (currentScan?.id === scan.id) setCurrentScan(null);
+    toast.success("Document deleted");
+  };
 
   // ---- Tesseract OCR ----
   const runOCR = useCallback(async (file: File): Promise<{ text: string; confidence: number }> => {
@@ -186,8 +230,9 @@ export default function DocumentScanner() {
   }, []);
 
   const processFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-      toast.error("Please upload an image file (JPG, PNG, TIFF) or PDF");
+    // Tesseract reads images only; a PDF would fail after a long wait.
+    if (!["image/jpeg", "image/png", "image/webp", "image/tiff"].includes(file.type)) {
+      toast.error("Please upload a photo or scan as JPG, PNG, WebP or TIFF");
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -199,7 +244,6 @@ export default function DocumentScanner() {
     setScanProgress(0);
 
     try {
-      // For PDFs, we'll tell the user we're processing page 1
       const imageUrl = URL.createObjectURL(file);
 
       const { text, confidence } = await runOCR(file);
@@ -211,8 +255,38 @@ export default function DocumentScanner() {
       }
 
       const fields = extractFields(text);
+      // Store the original and its OCR result for the organisation.
+      let saved = false;
+      let storagePath: string | undefined;
+      let savedId = Date.now().toString();
+      const orgId = profile?.organization_id;
+      if (orgId) {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const key = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+        storagePath = `${orgId}/${key}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("documents").upload(storagePath, file, { contentType: file.type });
+        if (!upErr) {
+          const { data: row, error: rowErr } = await supabase.from("documents").insert({
+            organization_id: orgId,
+            uploaded_by: profile?.id,
+            filename: file.name.slice(0, 200),
+            mime_type: file.type,
+            size_bytes: file.size,
+            storage_path: storagePath,
+            ocr_text: text,
+            ocr_confidence: confidence,
+            fields: { ...fields },
+          }).select("id").single();
+          if (!rowErr && row) { saved = true; savedId = row.id; }
+          else await supabase.storage.from("documents").remove([storagePath]);
+        }
+      }
+      if (!saved) toast.warning("Scanned, but the document could not be saved to your records.");
+
       const result: ScanResult = {
-        id: Date.now().toString(),
+        id: savedId,
+        saved,
+        storagePath: saved ? storagePath : undefined,
         filename: file.name,
         imageUrl,
         rawText: text,
@@ -222,7 +296,7 @@ export default function DocumentScanner() {
       };
 
       setCurrentScan(result);
-      setHistory((prev) => [result, ...prev].slice(0, 10));
+      setHistory((prev) => [result, ...prev]);
       toast.success(`Document scanned — ${confidence}% confidence`);
     } catch (err: any) {
       toast.error(`OCR failed: ${err.message}`);
@@ -230,7 +304,7 @@ export default function DocumentScanner() {
       setIsScanning(false);
       setScanProgress(0);
     }
-  }, [runOCR]);
+  }, [runOCR, profile?.organization_id, profile?.id]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -342,7 +416,7 @@ export default function DocumentScanner() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/tiff"
                     className="hidden"
                     onChange={handleFileChange}
                   />
@@ -391,7 +465,7 @@ export default function DocumentScanner() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />Scan Another Document
-                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                    <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/tiff" className="hidden" onChange={handleFileChange} />
                   </Button>
                 </div>
               )}
@@ -490,7 +564,7 @@ export default function DocumentScanner() {
               <div className="card-terminal p-12 text-center">
                 <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-30" />
                 <h3 className="font-semibold mb-2">No scans yet</h3>
-                <p className="text-sm text-muted-foreground">Scanned documents will appear here (last 10)</p>
+                <p className="text-sm text-muted-foreground">Scanned documents are saved for your organisation and listed here.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -522,6 +596,10 @@ export default function DocumentScanner() {
                         {scan.fields.weight && <span className="text-xs text-muted-foreground">{scan.fields.weight}</span>}
                       </div>
                     </div>
+                    <Button variant="ghost" size="icon" className="self-center shrink-0 text-red-500" aria-label={`Delete ${scan.filename}`}
+                      onClick={(e) => { e.stopPropagation(); void deleteScan(scan); }}>
+                      <X className="w-4 h-4" />
+                    </Button>
                     <ChevronRight className="w-4 h-4 text-muted-foreground self-center shrink-0" />
                   </div>
                 ))}
