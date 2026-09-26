@@ -39,7 +39,11 @@ export default function Analytics() {
     const avgFuel = vehicles.length > 0 ? Math.round(vehicles.reduce((s, v) => s + (v.fuel_level || 0), 0) / vehicles.length) : 0;
     const completedJobs = jobs.filter((j) => j.status === "completed").length;
     const totalJobs = jobs.length;
-    const onTimeRate = totalJobs > 0 ? Math.round((completedJobs / Math.max(totalJobs, 1)) * 100) : 0;
+    // On time = completed no later than 15 minutes after its ETA. Jobs without
+    // an ETA or completion time cannot be judged and are left out.
+    const judged = jobs.filter((j) => j.status === "completed" && j.eta && j.completed_at);
+    const onTime = judged.filter((j) => new Date(j.completed_at!).getTime() <= new Date(j.eta!).getTime() + 15 * 60000).length;
+    const onTimeRate = judged.length > 0 ? Math.round((onTime / judged.length) * 100) : null;
     const totalMileage = vehicles.reduce((s, v) => s + (v.mileage || 0), 0);
 
     return { utilization, avgFuel, onTimeRate, totalMileage, completedJobs, totalJobs, activeVehicles };
@@ -155,7 +159,7 @@ export default function Analytics() {
           <div className="card-terminal p-4">
             <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Completed Jobs</span></div>
             <p className="text-2xl font-mono font-bold text-cyan">{kpis.completedJobs}</p>
-            <p className="text-xs text-muted-foreground mt-1">of {kpis.totalJobs} total</p>
+            <p className="text-xs text-muted-foreground mt-1">of {kpis.totalJobs} total · on time {kpis.onTimeRate === null ? "—" : `${kpis.onTimeRate}%`}</p>
           </div>
           <div className="card-terminal p-4">
             <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Total Mileage</span></div>

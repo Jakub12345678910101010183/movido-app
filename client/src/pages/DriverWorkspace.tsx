@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Truck, MapPin, Navigation, CheckCircle2, Circle, Loader2, Camera, PenLine,
-  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag,
+  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag, LocateFixed, LocateOff, MessageSquare, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { Job } from "@/lib/database.types";
+import { useMessages } from "@/hooks/useSupabaseData";
+import { LogIncidentDialog, LogFuelDialog } from "@/components/RecordForms";
 
 type StopStatus = "pending" | "arrived" | "completed";
 type Stop = { label: string; address: string; status: StopStatus };
@@ -65,24 +67,172 @@ const STATUS_LABEL: Record<Job["status"], string> = {
   completed: "Completed", cancelled: "Cancelled",
 };
 
+
+type ShareState = "off" | "starting" | "active" | "denied" | "unsupported" | "error";
+const SHARE_KEY = "movido.driver.share_location";
+const MIN_INTERVAL_MS = 15000;
+const MIN_DISTANCE_M = 50;
+
+function metresBetween(a: GeolocationCoordinates, b: GeolocationCoordinates): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Shares the device position while this screen is open. Positions go through
+ * driver_report_location(), which only ever writes the calling driver's own
+ * record. Throttled to one report per 15 s unless the driver moved 50 m.
+ * A browser page cannot report in the background — the UI says so.
+ */
+function useLocationSharing() {
+  const [state, setState] = useState<ShareState>("off");
+  const [lastSent, setLastSent] = useState<Date | null>(null);
+  const watchId = useRef<number | null>(null);
+  const last = useRef<{ at: number; coords: GeolocationCoordinates } | null>(null);
+  const sending = useRef(false);
+
+  const pending = useRef<GeolocationPosition | null>(null);
+  const retryTimer = useRef<number | null>(null);
+
+  const report = useCallback(async (pos: GeolocationPosition, force = false) => {
+    const prev = last.current;
+    const due = force || !prev || Date.now() - prev.at >= MIN_INTERVAL_MS ||
+      metresBetween(prev.coords, pos.coords) >= MIN_DISTANCE_M;
+    if (!due) return;
+    if (sending.current) {
+      pending.current = pos; // newest fix wins once the current send finishes
+      return;
+    }
+    sending.current = true;
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    const { error } = await supabase.rpc("driver_report_location", {
+      p_lat: pos.coords.latitude,
+      p_lng: pos.coords.longitude,
+      p_heading: pos.coords.heading ?? undefined,
+      p_speed_mps: pos.coords.speed ?? undefined,
+      p_accuracy_m: pos.coords.accuracy ?? undefined,
+    });
+    sending.current = false;
+    if (error) {
+      setState("error");
+      // A parked vehicle may not produce a new fix for minutes: resend this
+      // one shortly instead of waiting for the next GPS update.
+      retryTimer.current = window.setTimeout(() => { void report(pending.current ?? pos, true); }, 5000);
+      return;
+    }
+    last.current = { at: Date.now(), coords: pos.coords };
+    setLastSent(new Date());
+    setState("active");
+    const next = pending.current;
+    pending.current = null;
+    if (next && next !== pos) void report(next);
+  }, []);
+
+  const stop = useCallback(() => {
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    pending.current = null;
+    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    watchId.current = null;
+    setState("off");
+    try { window.localStorage.setItem(SHARE_KEY, "off"); } catch { /* storage unavailable */ }
+  }, []);
+
+  const start = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      setState("unsupported");
+      return;
+    }
+    if (watchId.current !== null) return;
+    setState("starting");
+    try { window.localStorage.setItem(SHARE_KEY, "on"); } catch { /* storage unavailable */ }
+    watchId.current = navigator.geolocation.watchPosition(
+      (pos) => { void report(pos); },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+          setState("denied");
+        } else {
+          setState("error");
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 },
+    );
+  }, [report]);
+
+  useEffect(() => {
+    let wanted = false;
+    try { wanted = window.localStorage.getItem(SHARE_KEY) === "on"; } catch { /* ignore */ }
+    if (wanted) start();
+    return () => {
+      if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+      if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    };
+  }, [start]);
+
+  return { state, lastSent, start, stop };
+}
+
+function LocationBanner({ sharing }: { sharing: ReturnType<typeof useLocationSharing> }) {
+  const { state, lastSent, start, stop } = sharing;
+  const on = state === "active" || state === "starting" || state === "error";
+  const text: Record<ShareState, string> = {
+    off: "Location sharing is off — dispatch cannot see where you are.",
+    starting: "Waiting for a GPS fix…",
+    active: `Sharing live location${lastSent ? ` · sent ${lastSent.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}`,
+    denied: "Location permission was denied. Allow location for this site in your browser settings.",
+    unsupported: "This browser cannot share location.",
+    error: "Could not send your location — retrying with the next GPS fix.",
+  };
+  return (
+    <div className={`rounded-xl border p-3 flex items-center gap-3 ${state === "active" ? "border-green-500/40 bg-green-500/5" : "border-border bg-card"}`}>
+      {on ? <LocateFixed className="w-5 h-5 text-green-500 shrink-0" /> : <LocateOff className="w-5 h-5 text-muted-foreground shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm" role="status">{text[state]}</p>
+        {on && <p className="text-xs text-muted-foreground">Keep this screen open while driving; browsers pause location in the background.</p>}
+      </div>
+      {on ? (
+        <Button size="sm" variant="outline" onClick={stop}>Stop</Button>
+      ) : (
+        <Button size="sm" onClick={start} disabled={state === "unsupported"}>Share</Button>
+      )}
+    </div>
+  );
+}
+
 export default function DriverWorkspace() {
   const { profile, signOut } = useAuthContext();
+  const sharing = useLocationSharing();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
+  const [showMessages, setShowMessages] = useState(false);
+  const [me, setMe] = useState<{ id: number; vehicle_id: number | null } | null>(null);
+  const [showIncident, setShowIncident] = useState(false);
+  const [showFuel, setShowFuel] = useState(false);
+
+  useEffect(() => {
+    // RLS returns only the caller's own driver record.
+    void withRetry(() => supabase.from("drivers").select("id, vehicle_id").maybeSingle())
+      .then(({ data }) => { if (data) setMe(data); });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     const since = new Date();
     since.setHours(0, 0, 0, 0);
     // RLS returns only jobs assigned to this driver in their organisation.
-    const { data, error } = await supabase
+    const { data, error } = await withRetry(() => supabase
       .from("jobs")
       .select("*")
       .or(`status.in.(pending,assigned,in_progress),completed_at.gte.${since.toISOString()}`)
       .order("scheduled_date", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }), 3);
     setLoading(false);
     if (error) {
       setLoadError(true);
@@ -104,19 +254,22 @@ export default function DriverWorkspace() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2 min-w-0">
-          {openJob ? (
-            <Button variant="ghost" size="icon" aria-label="Back to my jobs" onClick={() => setOpenJobId(null)}>
+          {openJob || showMessages ? (
+            <Button variant="ghost" size="icon" aria-label="Back to my jobs" onClick={() => { setOpenJobId(null); setShowMessages(false); }}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
           ) : (
             <Truck className="w-6 h-6 text-primary shrink-0" />
           )}
           <div className="min-w-0">
-            <p className="font-semibold truncate">{openJob ? openJob.reference : "My jobs"}</p>
+            <p className="font-semibold truncate">{showMessages ? "Messages" : openJob ? openJob.reference : "My jobs"}</p>
             <p className="text-xs text-muted-foreground truncate">{profile?.name ?? profile?.email}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label="Messages" onClick={() => { setShowMessages(true); setOpenJobId(null); }}>
+            <MessageSquare className="w-5 h-5" />
+          </Button>
           <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => void load()}>
             <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -126,11 +279,15 @@ export default function DriverWorkspace() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl p-4">
-        {openJob ? (
+      <main className="mx-auto max-w-xl p-4 space-y-4">
+        <LocationBanner sharing={sharing} />
+        {showMessages ? (
+          <DriverMessages userId={profile?.id} />
+        ) : openJob ? (
           <JobDetail
             job={openJob}
             onChanged={load}
+            onStarted={() => { if (sharing.state === "off") sharing.start(); }}
             onPatch={(patch) => setJobs((prev) => prev.map((j) => (j.id === openJob.id ? { ...j, ...patch } : j)))}
           />
         ) : loading && jobs.length === 0 ? (
@@ -153,6 +310,12 @@ export default function DriverWorkspace() {
                 <JobCard key={job.id} job={job} onOpen={() => setOpenJobId(job.id)} />
               ))}
             </section>
+            {me && (
+              <section className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => setShowIncident(true)}>Report incident</Button>
+                <Button variant="outline" onClick={() => setShowFuel(true)}>Log fuel</Button>
+              </section>
+            )}
             {done.length > 0 && (
               <section className="space-y-3">
                 <h2 className="text-sm font-medium text-muted-foreground">Completed today ({done.length})</h2>
@@ -164,6 +327,18 @@ export default function DriverWorkspace() {
           </div>
         )}
       </main>
+      {me && (
+        <>
+          <LogIncidentDialog
+            open={showIncident}
+            onOpenChange={setShowIncident}
+            fixedDriverId={me.id}
+            defaultVehicleId={me.vehicle_id}
+            defaultJobId={active.find((j) => j.status === "in_progress")?.id ?? null}
+          />
+          <LogFuelDialog open={showFuel} onOpenChange={setShowFuel} fixedDriverId={me.id} defaultVehicleId={me.vehicle_id} />
+        </>
+      )}
     </div>
   );
 }
@@ -193,9 +368,10 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
   );
 }
 
-function JobDetail({ job, onChanged, onPatch }: {
+function JobDetail({ job, onChanged, onPatch, onStarted }: {
   job: Job;
   onChanged: () => Promise<void>;
+  onStarted: () => void;
   onPatch: (patch: Partial<Job>) => void;
 }) {
   const stops = parseStops(job.stops);
@@ -211,6 +387,7 @@ function JobDetail({ job, onChanged, onPatch }: {
     if (error) toast.error("Could not start the job");
     else {
       onPatch({ status: "in_progress" });
+      onStarted();
       toast.success("Job started");
       await onChanged();
     }
@@ -455,6 +632,72 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
         <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
         <Button onClick={submit} disabled={saving}>
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Complete delivery
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Driver ↔ dispatch messages. Sent to "dispatch" so any dispatcher can answer. */
+function DriverMessages({ userId }: { userId: string | undefined }) {
+  const { messages, isLoading, error, send } = useMessages(userId);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    try {
+      await send({ recipient_id: "dispatch", content: text.trim(), channel: "driver" });
+      setText("");
+    } catch {
+      toast.error("Message not sent — check your connection and try again");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border bg-card p-3 space-y-2 max-h-[55vh] overflow-y-auto">
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />
+        ) : error && messages.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center">Messages could not be loaded.</p>
+        ) : messages.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No messages yet. Write to dispatch below.</p>
+        ) : (
+          messages.map((m) => {
+            const mine = m.sender_id === userId;
+            return (
+              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary/20" : m.recipient_id === "broadcast" ? "bg-amber-500/15" : "bg-muted/40"}`}>
+                  {!mine && <p className="text-[10px] uppercase text-muted-foreground">{m.recipient_id === "broadcast" ? "Broadcast" : "Dispatch"}</p>}
+                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  <p className="text-[10px] text-muted-foreground text-right mt-0.5">
+                    {new Date(m.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={endRef} />
+      </div>
+      <div className="flex gap-2">
+        <Input
+          aria-label="Message to dispatch"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
+          placeholder="Message dispatch…"
+          maxLength={1000}
+        />
+        <Button onClick={() => void submit()} disabled={sending || !text.trim()} aria-label="Send message">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>
       </div>
     </div>

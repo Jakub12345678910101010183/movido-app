@@ -21,7 +21,8 @@ import {
   Shield, MapPin, User, Truck, Camera, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useIncidents } from "@/hooks/useSupabaseData";
+import { useIncidents, useJobs } from "@/hooks/useSupabaseData";
+import { LogIncidentDialog } from "@/components/RecordForms";
 import { useDrivers } from "@/hooks/useSupabaseData";
 import { useVehicles } from "@/hooks/useSupabaseData";
 import type { Incident } from "@/lib/database.types";
@@ -52,6 +53,8 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 export default function Incidents() {
   const { incidents, isLoading, refetch, updateStatus, remove } = useIncidents();
   const { drivers } = useDrivers();
+  const { jobs } = useJobs();
+  const [showLog, setShowLog] = useState(false);
   const { vehicles } = useVehicles();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -135,10 +138,23 @@ export default function Incidents() {
               Real-time driver incident reports — accidents, near misses &amp; damage
             </p>
           </div>
-          <Button variant="outline" size="icon" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowLog(true)}>
+              <AlertTriangle className="w-4 h-4 mr-2" />Report incident
+            </Button>
+            <Button variant="outline" size="icon" aria-label="Refresh incidents" onClick={() => refetch()}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
+        <LogIncidentDialog
+          open={showLog}
+          onOpenChange={setShowLog}
+          drivers={drivers.map((d) => ({ id: d.id, label: d.name }))}
+          vehicles={vehicles.map((v) => ({ id: v.id, label: v.vehicle_id }))}
+          jobs={jobs.filter((j) => j.status !== "cancelled").slice(0, 100).map((j) => ({ id: j.id, label: `${j.reference} — ${j.customer}` }))}
+          onSaved={() => refetch()}
+        />
 
         {/* Stats */}
         <div className="grid grid-cols-5 gap-4 mb-6">

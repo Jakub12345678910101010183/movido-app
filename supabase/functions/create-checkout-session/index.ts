@@ -109,8 +109,29 @@ Deno.serve(async (req: Request) => {
     .eq("organization_id", orgId);
 
   const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+
+  // The price must exist (and be active) in the mode of this secret key. A
+  // live price with a test key — or the reverse — fails here, before any
+  // customer is created.
+  try {
+    const price = await stripe.prices.retrieve(priceId);
+    if (!price.active) return json(req, 409, { error: "PRICE_INACTIVE" });
+  } catch (err) {
+    console.error("price_unavailable", err instanceof Error ? err.message : "unknown");
+    return json(req, 502, { error: "PRICE_UNAVAILABLE" });
+  }
+
   try {
     let customerId: string | null = org.stripe_customer_id;
+    // A customer id stored under the other Stripe mode (or deleted) is useless.
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if ((existing as { deleted?: boolean }).deleted) customerId = null;
+      } catch {
+        customerId = null;
+      }
+    }
     if (!customerId) {
       const customer = await stripe.customers.create({
         name: org.name,

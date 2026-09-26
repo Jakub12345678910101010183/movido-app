@@ -15,7 +15,7 @@ import type { User as AppUser } from "@/lib/database.types";
  * The roles the database allows on public.users (CHECK users_role_check).
  * Anything else — including a missing profile — is treated as no role at all.
  */
-export type AppRole = "admin" | "dispatcher" | "driver" | "pending";
+export type AppRole = "admin" | "dispatcher" | "driver" | "pending" | "disabled";
 
 /** Roles allowed into the dispatch centre. */
 export const DISPATCH_ROLES: readonly AppRole[] = ["admin", "dispatcher"];
@@ -27,7 +27,7 @@ export const DISPATCH_ROLES: readonly AppRole[] = ["admin", "dispatcher"];
  */
 function normalizeRole(raw: unknown): AppRole | null {
   return raw === "admin" || raw === "dispatcher" || raw === "driver" ||
-      raw === "pending"
+      raw === "pending" || raw === "disabled"
     ? raw
     : null;
 }

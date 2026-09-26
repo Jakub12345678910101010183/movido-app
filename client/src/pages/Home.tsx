@@ -355,7 +355,7 @@ export default function Home() {
               </div>
               <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
                 <Download className="w-3 h-3" />
-                Available as an Expo/React Native build for beta testers — contact us to join
+                Drivers use MOViDO in their phone's browser today at movidologistics.uk/driver — no install needed
               </p>
             </div>
 

@@ -63,19 +63,30 @@ export default function Reports() {
   const [reportName, setReportName] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const { vehicles } = useVehicles();
-  const { drivers } = useDrivers();
-  const { jobs } = useJobs();
-  const { maintenance } = useMaintenance();
-  const { incidents } = useIncidents();
-  const { fuelLogs } = useFuelLogs();
+  const v = useVehicles();
+  const dr = useDrivers();
+  const jb = useJobs();
+  const mt = useMaintenance();
+  const inc = useIncidents();
+  const fl = useFuelLogs();
+  const { vehicles } = v;
+  const { drivers } = dr;
+  const { jobs } = jb;
+  const { maintenance } = mt;
+  const { incidents } = inc;
+  const { fuelLogs } = fl;
+  // An export built from data that has not loaded (or failed to load) would
+  // silently be empty, so generating waits for — and reports — the loads.
+  const dataLoading = [v, dr, jb, mt, inc, fl].some((h) => h.isLoading);
+  const dataError = [v, dr, jb, mt, inc, fl].find((h) => h.error)?.error ?? null;
 
   const generateReport = useCallback(async () => {
+    if (dataError) {
+      toast.error("Some data could not be loaded — refresh the page and try again.");
+      return;
+    }
     const name = reportName.trim() || `${reportTypes.find((t) => t.value === selectedType)?.label} — ${new Date().toLocaleDateString("en-GB")}`;
     setIsGenerating(true);
-
-    // Simulate brief processing
-    await new Promise((r) => setTimeout(r, 800));
 
     let csvData = "";
     let rows = 0;
@@ -193,21 +204,11 @@ export default function Reports() {
         break;
       }
       case "wtd": {
-        const now = new Date();
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay() + 1);
-        startOfWeek.setHours(0, 0, 0, 0);
         const headers = ["Driver", "Status", "Today Drive (h)", "Week Drive (h)", "Remaining Daily (h)", "Remaining Weekly (h)", "Compliance", "Violations"];
         const data = drivers.map((d) => {
-          const driverJobs = jobs.filter((j) => j.driver_id === d.id);
-          const weekJobs = driverJobs.filter((j) => new Date(j.created_at) >= startOfWeek && (j.status === "completed" || j.status === "in_progress"));
-          const todayJobs = driverJobs.filter((j) => {
-            const s = new Date(now); s.setHours(0, 0, 0, 0);
-            return new Date(j.created_at) >= s && (j.status === "completed" || j.status === "in_progress");
-          });
-          const base = ((d.id * 7 + 13) % 100) / 100;
-          const todayH = Math.min(todayJobs.length > 0 ? todayJobs.length * (2 + base * 2.5) : (d.status === "on_duty" ? 3 + base * 4 : 0), 12);
-          const weekH = Math.min(weekJobs.length > 0 ? weekJobs.length * (2.5 + base * 2) : (d.status !== "off_duty" ? 20 + base * 25 : 0), 60);
+          // Recorded hours only; MOViDO has no tachograph feed.
+          const todayH = Number(d.hours_today ?? 0);
+          const weekH = Number(d.hours_week ?? 0);
           const remDaily = Math.max(0, 9 - todayH).toFixed(1);
           const remWeekly = Math.max(0, 56 - weekH).toFixed(1);
           const violations = [];
@@ -228,11 +229,12 @@ export default function Reports() {
     };
 
     setReports((prev) => [report, ...prev]);
+    downloadReport(report);
     setShowGenerate(false);
     setReportName("");
     setIsGenerating(false);
     toast.success(`Report generated: ${rows} rows`);
-  }, [selectedType, reportName, vehicles, drivers, jobs, maintenance, incidents, fuelLogs]);
+  }, [selectedType, reportName, vehicles, drivers, jobs, maintenance, incidents, fuelLogs, dataError]);
 
   const downloadReport = (report: GeneratedReport) => {
     const blob = new Blob([report.csvData], { type: "text/csv;charset=utf-8;" });
@@ -286,7 +288,7 @@ export default function Reports() {
 
         {/* Generated Reports */}
         {reports.length === 0 ? (
-          <div className="card-terminal p-12 text-center"><FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" /><h3 className="text-lg font-semibold mb-2">No reports yet</h3><p className="text-muted-foreground">Click "Generate Report" to create your first report</p></div>
+          <div className="card-terminal p-12 text-center"><FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" /><h3 className="text-lg font-semibold mb-2">No reports generated in this session</h3><p className="text-muted-foreground">"Generate Report" builds a CSV from your live data and downloads it. Reports are not stored on the server.</p></div>
         ) : (
           <div className="card-terminal overflow-hidden">
             <table className="w-full">
@@ -333,7 +335,7 @@ export default function Reports() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowGenerate(false)}>Cancel</Button>
-              <Button onClick={generateReport} disabled={isGenerating} className="glow-cyan-sm">{isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</> : <><FileText className="w-4 h-4 mr-2" />Generate</>}</Button>
+              <Button onClick={generateReport} disabled={isGenerating || dataLoading} className="glow-cyan-sm">{isGenerating || dataLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{dataLoading ? "Loading data..." : "Generating..."}</> : <><FileText className="w-4 h-4 mr-2" />Generate</>}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

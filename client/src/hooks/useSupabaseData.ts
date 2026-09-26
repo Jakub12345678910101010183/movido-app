@@ -171,43 +171,46 @@ export function useRealtimeDriverLocations() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Initial fetch of all active drivers with locations
+    let active = true;
+    // Positions reported in the last 12 hours (RLS scopes this to the org).
     const fetchDrivers = async () => {
-      const { data } = await supabase
+      const since = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const { data, error } = await supabase
         .from("drivers")
         .select("*")
         .not("location_lat", "is", null)
-        .in("status", ["on_duty", "available"]);
-
-      if (data) setDrivers(data as Driver[]);
+        .gte("location_updated_at", since)
+        .abortSignal(AbortSignal.timeout(15000));
+      if (active && !error && data) setDrivers(data);
     };
 
-    fetchDrivers();
+    void fetchDrivers();
+    // Realtime is the fast path; polling keeps the map live when the
+    // websocket is unavailable (corporate proxies, mobile networks).
+    const poll = setInterval(() => { void fetchDrivers(); }, 20000);
 
-    // Subscribe to location updates only
     const channel = supabase
       .channel("driver-locations")
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "drivers",
-          filter: "location_lat=neq.null",
-        },
+        { event: "UPDATE", schema: "public", table: "drivers" },
         (payload) => {
-          setDrivers(prev =>
-            prev.map(d =>
-              d.id === (payload.new as Driver).id ? (payload.new as Driver) : d
-            )
+          const next = payload.new as Driver;
+          if (next.location_lat == null || next.location_lng == null) return;
+          setDrivers((prev) =>
+            prev.some((d) => d.id === next.id)
+              ? prev.map((d) => (d.id === next.id ? next : d))
+              : [...prev, next],
           );
-        }
+        },
       )
       .subscribe((status) => {
         setIsConnected(status === "SUBSCRIBED");
       });
 
     return () => {
+      active = false;
+      clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -256,10 +259,12 @@ export function useJobs() {
     // this year (RLS scopes the query to the caller's own jobs). Counting rows
     // would reuse numbers after a deletion.
     const prefix = `JOB-${new Date().getFullYear()}-`;
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from("jobs")
       .select("reference")
       .like("reference", `${prefix}%`);
+    // Guessing on failure would hand out a number that is already taken.
+    if (error) throw error;
     const highest = (rows ?? []).reduce((max, row) => {
       const n = Number.parseInt(row.reference.slice(prefix.length), 10);
       return Number.isFinite(n) && n > max ? n : max;
@@ -277,6 +282,7 @@ export function useJobs() {
 export function useMaintenance(vehicleId?: number) {
   const [data, setData] = useState<FleetMaintenance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     let query = supabase
@@ -288,76 +294,88 @@ export function useMaintenance(vehicleId?: number) {
       query = query.eq("vehicle_id", vehicleId);
     }
 
-    const { data: rows } = await query;
-    setData((rows || []) as FleetMaintenance[]);
+    const { data: rows, error: err } = await query;
     setIsLoading(false);
+    if (err) { setError(err.message); return; }
+    setError(null);
+    setData(rows ?? []);
   }, [vehicleId]);
 
   useEffect(() => {
     fetch();
   }, [fetch]);
 
-  return { maintenance: data, isLoading, refetch: fetch };
+  return { maintenance: data, isLoading, error, refetch: fetch };
 }
 
 // ============================================
 // MESSAGES (realtime)
 // ============================================
 
+/**
+ * Messages visible to the caller. RLS decides the scope: dispatch/admin see
+ * the organisation's whole message log (a shared dispatch inbox), a driver
+ * sees what they sent, what was sent to them and broadcasts.
+ * Recipients: a user id, "dispatch" (the dispatch team) or "broadcast".
+ */
 export function useMessages(currentUserId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     if (!currentUserId) { setIsLoading(false); return; }
-    setIsLoading(true);
-    const { data: rows } = await supabase
+    const { data: rows, error: err } = await supabase
       .from("messages")
       .select("*")
-      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
-      .order("created_at", { ascending: true })
-      .limit(500);
-    setMessages((rows || []) as Message[]);
+      .order("created_at", { ascending: false })
+      .limit(500)
+      .abortSignal(AbortSignal.timeout(15000));
     setIsLoading(false);
+    if (err) { setError(err.message); return; }
+    setError(null);
+    setMessages((rows ?? []).reverse());
   }, [currentUserId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { void fetch(); }, [fetch]);
 
-  // Realtime subscription
+  // Realtime for instant delivery, polling as the fallback when websockets
+  // are unavailable.
   useEffect(() => {
     if (!currentUserId) return;
+    const poll = setInterval(() => { void fetch(); }, 15000);
     const channel = supabase
-      .channel("messages-realtime")
+      .channel(`messages-${currentUserId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         const msg = payload.new as Message;
-        if (msg.sender_id === currentUserId || msg.recipient_id === currentUserId) {
-          setMessages((prev) => [...prev, msg]);
-        }
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [currentUserId]);
+    return () => { clearInterval(poll); supabase.removeChannel(channel); };
+  }, [currentUserId, fetch]);
 
   const send = useCallback(async (data: {
-    recipient_id: string | null;
+    recipient_id: string;
     content: string;
     channel?: Message["channel"];
   }) => {
     if (!currentUserId) throw new Error("Not authenticated");
-    const { error } = await supabase.from("messages").insert({
+    const { data: row, error: err } = await supabase.from("messages").insert({
       sender_id: currentUserId,
       recipient_id: data.recipient_id,
       content: data.content,
       channel: data.channel || "dispatch",
-    });
-    if (error) throw error;
+    }).select().single();
+    if (err) throw err;
+    if (row) setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
   }, [currentUserId]);
 
   const markAsRead = useCallback(async (messageId: number) => {
-    await supabase.from("messages").update({ read: true }).eq("id", messageId);
+    const { error: err } = await supabase.from("messages").update({ read: true }).eq("id", messageId);
+    if (!err) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, read: true } : m)));
   }, []);
 
-  return { messages, isLoading, refetch: fetch, send, markAsRead };
+  return { messages, isLoading, error, refetch: fetch, send, markAsRead };
 }
 
 // ============================================
