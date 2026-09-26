@@ -302,6 +302,7 @@ export default function Messenger() {
               <div className="border-t border-border bg-card/50 p-4">
                 <div className="flex gap-2">
                   <Input
+                    aria-label="Message"
                     placeholder={
                       selectedContact === "broadcast"
                         ? "Type broadcast message..."
