@@ -1,5 +1,5 @@
 /**
- * Document Scanner — AI-Powered Transport Document OCR
+ * Document Scanner — transport document OCR (Tesseract.js)
  * Bloomberg/Terminal Noir style
  *
  * Features:
@@ -372,7 +372,7 @@ export default function DocumentScanner() {
               Document Scanner
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              AI-powered OCR — scan CMR notes, consignment docs &amp; delivery manifests
+              Text recognition (OCR) for CMR notes, consignment notes and delivery manifests
             </p>
           </div>
           {currentScan && (

@@ -130,7 +130,7 @@ export default function Maintenance() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Fleet Maintenance</h1>
-            <p className="text-sm text-muted-foreground mt-1">Service scheduling & predictive alerts</p>
+            <p className="text-sm text-muted-foreground mt-1">Service scheduling and due-date alerts</p>
           </div>
           <Button className="glow-cyan-sm" onClick={() => { setFormData(defaultForm); setShowAddModal(true); }}>
             <Plus className="w-4 h-4 mr-2" />Schedule Service
@@ -138,7 +138,7 @@ export default function Maintenance() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4">
             <div className="flex items-center gap-2 mb-1"><Calendar className="w-4 h-4 text-blue-500" /><span className="text-xs text-muted-foreground">Scheduled</span></div>
             <p className="text-2xl font-mono font-bold text-blue-500">{scheduledCount}</p>
@@ -158,8 +158,8 @@ export default function Maintenance() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search vehicle, type..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
@@ -173,7 +173,7 @@ export default function Maintenance() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
         </div>
 
         {/* Loading */}

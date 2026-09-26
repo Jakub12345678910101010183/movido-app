@@ -230,13 +230,8 @@ export function TomTomMap({
 
       const tt = window.tt;
 
-      // Determine style based on mapStyle
-      let style = `https://api.tomtom.com/style/2/custom/style/dG9tdG9tQEBAeTNNNW0zSDVXdjBNWVZCVDs0OWJmMzMwZi00YWI2LTRjZjUtOWI4NC1kOTYxMjNjMjg4NTk=.json?key=${TOMTOM_API_KEY}`;
-      if (mapStyle === "satellite") {
-        style = `https://api.tomtom.com/map/1/style/20.3.2-4/2/basic_night-satellite.json?key=${TOMTOM_API_KEY}`;
-      } else if (mapStyle === "main") {
-        style = undefined as any; // default TomTom style
-      }
+      // Built-in SDK 6 styles (the previous custom and v1 style URLs no longer exist).
+      const styleName = mapStyle === "satellite" ? "hybrid_night" : mapStyle === "main" ? "basic_main" : "basic_night";
 
       const mapOptions: any = {
         key: TOMTOM_API_KEY,
@@ -245,13 +240,9 @@ export function TomTomMap({
         zoom: initialZoom,
         language: "en-GB",
         // SDK 6.x: traffic is a style layer toggled here (tile tiers are 5.x).
+        style: { map: styleName },
         stylesVisibility: { trafficFlow: showTraffic, trafficIncidents: showTraffic },
       };
-
-      if (style && mapStyle === "night") {
-        // Use dark style for Terminal Noir aesthetic
-        mapOptions.style = `https://api.tomtom.com/style/2/custom/style/dG9tdG9tQEBAeTNNNW0zSDVXdjBNWVZCVDs0OWJmMzMwZi00YWI2LTRjZjUtOWI4NC1kOTYxMjNjMjg4NTk=.json?key=${TOMTOM_API_KEY}`;
-      }
 
       try {
         mapRef.current = tt.map(mapOptions);

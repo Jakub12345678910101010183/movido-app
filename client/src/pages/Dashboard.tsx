@@ -19,35 +19,12 @@ import {
 } from "lucide-react";
 import { TomTomMap, type MapMarker } from "@/components/TomTomMap";
 import { escapeHtml } from "@/lib/html";
-import { AIDispatcher } from "@/components/AIDispatcher";
+import { CLEAN_AIR_ZONES, CAZ_CHECK_URL } from "@/lib/cleanAirZones";
+import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
 
 const milesToKm = (miles: number) => miles * 1.60934;
-
-const lowBridges = [
-  { id: "br-1", lat: 51.5155, lng: -0.1419, height: 4.2, name: "Marylebone Underpass" },
-  { id: "br-2", lat: 52.4797, lng: -1.9026, height: 3.8, name: "Birmingham Rail Bridge" },
-  { id: "br-3", lat: 53.4723, lng: -2.2389, height: 4.0, name: "Manchester Canal Bridge" },
-  { id: "br-4", lat: 51.4545, lng: -0.0983, height: 3.9, name: "London Bridge Underpass" },
-  { id: "br-5", lat: 52.9548, lng: -1.1581, height: 4.1, name: "Nottingham Rail Bridge" },
-  { id: "br-6", lat: 53.8008, lng: -1.5491, height: 3.7, name: "Leeds Canal Bridge" },
-];
-
-const cazZones = [
-  { id: "caz-1", lat: 51.5074, lng: -0.1278, name: "London ULEZ", charge: 12.5 },
-  { id: "caz-2", lat: 52.4862, lng: -1.8904, name: "Birmingham CAZ", charge: 8.0 },
-  { id: "caz-3", lat: 53.4808, lng: -2.2426, name: "Manchester CAZ", charge: 7.5 },
-  { id: "caz-4", lat: 51.4545, lng: -2.5879, name: "Bristol CAZ", charge: 9.0 },
-];
-
-const etaPredictions = [
-  { region: "London & South East", activeJobs: 12, avgEta: "1h 45m", confidence: 94 },
-  { region: "Midlands", activeJobs: 8, avgEta: "2h 10m", confidence: 91 },
-  { region: "North West", activeJobs: 6, avgEta: "2h 35m", confidence: 88 },
-  { region: "Yorkshire", activeJobs: 5, avgEta: "1h 55m", confidence: 92 },
-  { region: "Scotland", activeJobs: 3, avgEta: "3h 20m", confidence: 85 },
-];
 
 function positionAge(iso: string | null): string {
   if (!iso) return "time unknown";
@@ -62,11 +39,11 @@ export default function Dashboard() {
     try { return localStorage.getItem("movido-distance-unit") !== "km"; } catch { return true; }
   });
   const [mapStyle, setMapStyle] = useState<"main" | "night" | "satellite">("night");
-  const [showHGVLayers, setShowHGVLayers] = useState(true);
-  const [showCAZLayers, setShowCAZLayers] = useState(true);
+  const [showCAZLayers, setShowCAZLayers] = useState(() => {
+    try { return localStorage.getItem("movido-show-caz") !== "false"; } catch { return true; }
+  });
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [showETAPanel, setShowETAPanel] = useState(false);
-  const [showAIDispatcher, setShowAIDispatcher] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [exportingRoute, setExportingRoute] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", timeZoneName: "short" }));
@@ -128,22 +105,15 @@ export default function Dashboard() {
       });
     }
 
-    if (showHGVLayers) {
-      lowBridges.forEach((b) => markers.push({
-        id: b.id, lat: b.lat, lng: b.lng, type: "bridge",
-        popup: `<strong>⚠ Low Bridge</strong><br/>${escapeHtml(b.name)}<br/>Height: <strong>${b.height}m</strong>`,
-      }));
-    }
-
     if (showCAZLayers) {
-      cazZones.forEach((c) => markers.push({
+      CLEAN_AIR_ZONES.forEach((c) => markers.push({
         id: c.id, lat: c.lat, lng: c.lng, type: "caz",
-        popup: `<strong>Clean Air Zone</strong><br/>${escapeHtml(c.name)}<br/>Charge: <strong>£${c.charge.toFixed(2)}/day</strong>`,
+        popup: `<strong>${escapeHtml(c.name)}</strong><br/>Charging zone — <a href="${CAZ_CHECK_URL}" target="_blank" rel="noopener noreferrer">check your vehicle</a>`,
       }));
     }
 
     return markers;
-  }, [liveDrivers, vehicles, showHGVLayers, showCAZLayers]);
+  }, [liveDrivers, vehicles, showCAZLayers]);
 
   // Stats
   const activeVehicleCount = vehicles.filter((v) => v.status === "active").length;
@@ -155,6 +125,11 @@ export default function Dashboard() {
     if (!ts) return false;
     return new Date(ts).toDateString() === new Date().toDateString();
   }).length;
+  // Open jobs with an ETA, soonest first; "late" = ETA passed and not delivered.
+  const upcomingEtas = jobs
+    .filter((j) => j.eta && j.status !== "completed" && j.status !== "cancelled")
+    .sort((a, b) => new Date(a.eta!).getTime() - new Date(b.eta!).getTime());
+  const lateJobs = upcomingEtas.filter((j) => new Date(j.eta!).getTime() < Date.now());
 
   useEffect(() => {
     try { localStorage.setItem("movido-distance-unit", useMiles ? "miles" : "km"); } catch {}
@@ -177,7 +152,8 @@ export default function Dashboard() {
   const getStatusColor = (s: string) => ({ in_progress: "text-green-500", assigned: "text-blue-500", pending: "text-amber-500", completed: "text-muted-foreground", cancelled: "text-red-500" }[s] || "text-muted-foreground");
 
   return (
-    <div className="min-h-screen bg-terminal flex flex-col">
+    <DashboardLayout>
+    <div className="min-h-full bg-terminal flex flex-col">
       {/* WTD Compliance Banner */}
       {wtdAlerts.violations.length > 0 && (
         <Link href="/wtd">
@@ -202,26 +178,16 @@ export default function Dashboard() {
       {/* LEFT SIDEBAR */}
       <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-border bg-card/50 flex flex-col">
         <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <Link href="/"><div className="flex items-center gap-2 cursor-pointer"><div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Truck className="w-4 h-4 text-primary" /></div><span className="font-bold tracking-tight">MOVIDO</span></div></Link>
-            <div className="flex items-center gap-1">
-              <div className={`w-2 h-2 rounded-full mr-2 ${realtimeConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} title={realtimeConnected ? "Realtime connected" : "Disconnected"} />
-              <Link href="/settings"><Button variant="ghost" size="icon" className="h-8 w-8"><Settings className="w-4 h-4" /></Button></Link>
-            </div>
-          </div>
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
             <span className="text-sm font-medium">Distance Unit</span>
             <div className="flex items-center gap-2">
               <span className={`text-xs ${useMiles ? "text-primary" : "text-muted-foreground"}`}>Miles</span>
-              <Switch checked={!useMiles} onCheckedChange={(c) => setUseMiles(!c)} />
+              <Switch checked={!useMiles} onCheckedChange={(c) => setUseMiles(!c)} aria-label="Show distances in kilometres" />
               <span className={`text-xs ${!useMiles ? "text-primary" : "text-muted-foreground"}`}>KM</span>
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-b border-border">
-          <Button variant="outline" className="w-full border-primary/30" onClick={() => setShowAIDispatcher(true)}><Sparkles className="w-4 h-4 mr-2" />AI Dispatcher</Button>
-        </div>
 
         {/* Fleet List */}
         <div className="flex-1 overflow-y-auto p-4">
@@ -304,20 +270,19 @@ export default function Dashboard() {
       </aside>
 
       {/* MAIN — TomTom Map */}
-      <main className="flex-1 flex flex-col min-w-0 min-h-[70vh] lg:min-h-0">
+      <main className="flex-1 flex flex-col min-w-0 min-h-[60vh] lg:min-h-0 order-first lg:order-none">
         <header className="min-h-14 py-2 border-b border-border bg-card/50 flex flex-wrap items-center justify-between gap-2 px-4">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <h1 className="font-semibold">Dispatch Center</h1>
             <span className="text-xs text-muted-foreground font-mono">{currentTime}</span>
-            {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-red-500"><WifiOff className="w-3 h-3" /> Offline</span>}
+            {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-amber-500" title="Instant updates unavailable; positions refresh every 20 seconds"><WifiOff className="w-3 h-3" /> Refreshing every 20 s</span>}
           </div>
           <div className="flex flex-wrap items-center gap-1 md:gap-2">
             <Button variant="ghost" size="sm" className={mapStyle === "night" ? "text-primary" : ""} onClick={() => setMapStyle("night")}><MapIcon className="w-4 h-4 mr-1" />Dark</Button>
             <Button variant="ghost" size="sm" className={mapStyle === "main" ? "text-primary" : ""} onClick={() => setMapStyle("main")}><MapIcon className="w-4 h-4 mr-1" />Light</Button>
             <Button variant="ghost" size="sm" className={mapStyle === "satellite" ? "text-primary" : ""} onClick={() => setMapStyle("satellite")}><Satellite className="w-4 h-4 mr-1" />Satellite</Button>
             <div className="w-px h-6 bg-border mx-2" />
-            <Button variant={showHGVLayers ? "default" : "ghost"} size="sm" onClick={() => { setShowHGVLayers(!showHGVLayers); toast.success(showHGVLayers ? "HGV layers hidden" : "HGV layers shown"); }}><Shield className="w-4 h-4 mr-1" />Low Bridges</Button>
-            <Button variant={showCAZLayers ? "default" : "ghost"} size="sm" onClick={() => { setShowCAZLayers(!showCAZLayers); toast.success(showCAZLayers ? "CAZ layers hidden" : "CAZ layers shown"); }}><AlertTriangle className="w-4 h-4 mr-1" />CAZ/ULEZ</Button>
+            <Button variant={showCAZLayers ? "default" : "ghost"} size="sm" aria-pressed={showCAZLayers} onClick={() => setShowCAZLayers(!showCAZLayers)}><AlertTriangle className="w-4 h-4 mr-1" />Clean Air Zones</Button>
           </div>
         </header>
 
@@ -349,7 +314,6 @@ export default function Dashboard() {
             <div className="space-y-1 text-xs">
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#00FFD4]" /><span className="text-muted-foreground">Active Vehicle</span></div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-500" /><span className="text-muted-foreground">Idle</span></div>
-              {showHGVLayers && <div className="flex items-center gap-2"><AlertTriangle className="w-3 h-3 text-amber-500" /><span className="text-muted-foreground">Low Bridge</span></div>}
               {showCAZLayers && <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-orange-500 bg-orange-500/20" /><span className="text-muted-foreground">Clean Air Zone</span></div>}
             </div>
           </div>
@@ -363,15 +327,15 @@ export default function Dashboard() {
           <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Truck className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Active Vehicles</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeVehicleCount}/{vehicles.length}</p></div>
           <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Navigation className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Jobs In Progress</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeJobCount}</p><p className="text-xs text-muted-foreground mt-1">{pendingJobCount} pending · {completedTodayCount} completed today</p></div>
           <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Fuel className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Avg Fleet Fuel</span></div><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length > 0 ? `${Math.round(vehicles.reduce((s, v) => s + (v.fuel_level ?? 0), 0) / vehicles.length)}%` : "—"}</p></div>
-          <div className="p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors border border-transparent hover:border-primary/30" onClick={() => setShowETAPanel(true)}>
-            <div className="flex items-center justify-between mb-1"><div className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">ETA Predictions</span></div><ChevronRight className="w-4 h-4 text-muted-foreground" /></div>
-            <p className="text-xs text-primary mt-1">Click for AI predictions →</p>
-          </div>
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30"><div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-xs text-amber-500">Map hazards shown</span></div><p className="text-2xl font-mono font-bold text-amber-500">{(showHGVLayers ? lowBridges.length : 0) + (showCAZLayers ? cazZones.length : 0)}</p></div>
+          <button type="button" className="w-full text-left p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors border border-transparent hover:border-primary/30" onClick={() => setShowETAPanel(true)}>
+            <div className="flex items-center justify-between mb-1"><div className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Upcoming ETAs</span></div><ChevronRight className="w-4 h-4 text-muted-foreground" /></div>
+            <p className="text-xs text-primary mt-1">{upcomingEtas.length} job{upcomingEtas.length === 1 ? "" : "s"} with an ETA →</p>
+          </button>
+          <div className={`p-3 rounded-lg border ${lateJobs.length > 0 ? "bg-amber-500/10 border-amber-500/30" : "bg-muted/30 border-transparent"}`}><div className="flex items-center gap-2 mb-1"><AlertTriangle className={`w-4 h-4 ${lateJobs.length > 0 ? "text-amber-500" : "text-muted-foreground"}`} /><span className="text-xs text-muted-foreground">Past ETA, not delivered</span></div><p className={`text-2xl font-mono font-bold ${lateJobs.length > 0 ? "text-amber-500" : "text-cyan"}`}>{lateJobs.length}</p></div>
         </div>
         <div className="mt-6 pt-6 border-t border-border space-y-2">
           <Button className="w-full" variant="outline" size="sm" onClick={() => { refetchVehicles(); refetchJobs(); toast.success("Data refreshed"); }}><RefreshCw className="w-4 h-4 mr-2" />Refresh Data</Button>
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><div className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-green-500" : "bg-red-500"}`} />{realtimeConnected ? "Supabase Realtime Connected" : "Realtime Disconnected"}</div>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><div className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-green-500" : "bg-amber-500"}`} />{realtimeConnected ? "Instant updates on" : "Refreshing every 20 s"}</div>
         </div>
       </aside>
 
@@ -380,37 +344,46 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="card-terminal w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Target className="w-5 h-5 text-primary" /></div><div><h2 className="font-semibold">AI ETA Predictions</h2><p className="text-xs text-muted-foreground">Fleet-wide delivery predictions across United Kingdom</p></div></div>
-              <Button variant="ghost" size="icon" onClick={() => setShowETAPanel(false)}><X className="w-5 h-5" /></Button>
+              <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Target className="w-5 h-5 text-primary" /></div><div><h2 className="font-semibold">Upcoming ETAs</h2><p className="text-xs text-muted-foreground">Scheduled arrival times of open jobs</p></div></div>
+              <Button variant="ghost" size="icon" aria-label="Close" onClick={() => setShowETAPanel(false)}><X className="w-5 h-5" /></Button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
-              <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Active Jobs</p><p className="text-2xl font-mono font-bold text-cyan">{activeJobCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Completed Today</p><p className="text-2xl font-mono font-bold text-green-500">{completedTodayCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Pending</p><p className="text-2xl font-mono font-bold text-amber-500">{pendingJobCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Vehicles</p><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length}</p></div>
               </div>
-              <h3 className="text-sm font-semibold mb-3">Regional Predictions</h3>
-              <div className="space-y-3">
-                {etaPredictions.map((r, i) => (
-                  <div key={i} className="p-4 rounded-lg bg-muted/30 border border-border">
-                    <div className="flex items-center justify-between mb-2"><h4 className="font-medium">{r.region}</h4><span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">{r.activeJobs} jobs</span></div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div><p className="text-xs text-muted-foreground">Avg. ETA</p><p className="font-mono font-bold text-cyan">{r.avgEta}</p></div>
-                      <div><p className="text-xs text-muted-foreground">AI Confidence</p><p className={`font-mono font-bold ${r.confidence >= 90 ? "text-green-500" : r.confidence >= 85 ? "text-amber-500" : "text-red-500"}`}>{r.confidence}%</p></div>
-                      <div><p className="text-xs text-muted-foreground">Traffic Impact</p><div className="w-full h-2 bg-muted rounded-full mt-1"><div className="h-full bg-primary rounded-full" style={{ width: `${100 - r.confidence + 50}%` }} /></div></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-sm font-semibold mb-3">Open jobs by ETA</h3>
+              {upcomingEtas.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">No open jobs have an ETA yet. Set a scheduled time when creating a job.</p>
+              ) : (
+                <div className="space-y-2">
+                  {upcomingEtas.map((j) => {
+                    const late = new Date(j.eta!).getTime() < Date.now();
+                    return (
+                      <div key={j.id} className="p-3 rounded-lg bg-muted/30 border border-border flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm text-primary">{j.reference}</p>
+                          <p className="text-xs text-muted-foreground truncate">{j.customer}{j.delivery_address ? ` · ${j.delivery_address}` : ""}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`font-mono text-sm ${late ? "text-amber-500" : "text-foreground"}`}>{new Date(j.eta!).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                          <p className={`text-xs ${late ? "text-amber-500" : "text-muted-foreground"}`}>{late ? "Past ETA" : j.status.replace("_", " ")}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="p-4 border-t border-border"><Button className="w-full" variant="outline" onClick={() => setShowETAPanel(false)}>Close</Button></div>
           </div>
         </div>
       )}
 
-      <AIDispatcher open={showAIDispatcher} onClose={() => setShowAIDispatcher(false)} />
       </div>{/* end flex-1 row */}
     </div>
+    </DashboardLayout>
   );
 }

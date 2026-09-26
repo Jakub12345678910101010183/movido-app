@@ -24,48 +24,50 @@ import {
   Fuel,
   CheckCircle2,
   Download,
+  MessageSquare,
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AIRouteDemo from "@/components/AIRouteDemo";
 
+// Product facts only — no performance or savings claims.
 const stats = [
-  { value: "99.9%", label: "Uptime" },
-  { value: "<2s", label: "Location Update" },
-  { value: "15%", label: "Fuel Savings" },
-  { value: "24/7", label: "Support" },
+  { value: "14 days", label: "Free trial" },
+  { value: "£19", label: "Per vehicle / month, from" },
+  { value: "~15 s", label: "Driver position updates" },
+  { value: "0", label: "Apps to install" },
 ];
 
 const features = [
   {
     icon: MapPin,
-    title: "Live Fleet Tracking",
-    description: "Real-time GPS tracking with TomTom integration. Monitor all vehicles on a single dashboard with instant location updates."
+    title: "Live Driver Tracking",
+    description: "Drivers share their phone's GPS from the MOViDO driver screen. Positions update about every 15 seconds on your dispatch map while sharing is on."
   },
   {
     icon: Zap,
-    title: "AI Route Optimizer",
-    description: "Intelligent route planning that considers vehicle constraints, traffic, and delivery windows to minimize empty miles."
+    title: "Route Planner",
+    description: "Orders your stops for the shortest drive, then calculates a truck route with TomTom using live traffic and your vehicle's height and weight."
   },
   {
     icon: Shield,
-    title: "Safety Alerts",
-    description: "Automatic low bridge and narrow street warnings. Protect your fleet from costly accidents with proactive alerts."
+    title: "Arrival & Departure Detection",
+    description: "MOViDO records when a driver arrives at or leaves a pickup, stop or delivery point, using the positions their phone reports."
   },
   {
     icon: Clock,
-    title: "Predictive ETA",
-    description: "Machine learning-powered arrival predictions that learn from historical data and real-time conditions."
+    title: "Customer Tracking Links",
+    description: "Every job gets a private tracking link. Your customer sees the delivery status and driver position — never the driver's phone number."
   },
   {
     icon: Bell,
-    title: "Real-time Notifications",
-    description: "Instant alerts for route changes, delays, and delivery completions. Keep customers informed automatically."
+    title: "Driver Messaging",
+    description: "Two-way messages between dispatch and each driver, plus broadcasts to the whole fleet."
   },
   {
     icon: FileCheck,
     title: "Digital POD",
-    description: "Electronic proof of delivery with signature capture, photos, and GPS verification for complete accountability."
+    description: "Drivers capture a photo, the recipient's signature and name. Stored privately for your company and viewable by dispatch."
   },
 ];
 
@@ -73,24 +75,21 @@ const steps = [
   {
     number: "01",
     title: "Add Your Fleet",
-    description: "Register your vehicles with their specifications including height, weight, and type constraints."
+    description: "Create your company, add vehicles and drivers, and invite drivers by email."
   },
   {
     number: "02",
     title: "Create Jobs",
-    description: "Enter delivery details and let our AI optimize routes automatically based on all constraints."
+    description: "Enter pickup, stops and delivery, assign a driver, and plan the route."
   },
   {
     number: "03",
     title: "Track & Deliver",
-    description: "Monitor progress in real-time, receive alerts, and collect digital proof of delivery."
+    description: "Drivers work through stops on their phone and finish with a photo and signature. You follow along on the map."
   },
 ];
 
 export default function Home() {
-  // Auth is available if needed for protected features
-  // const { user, isAuthenticated } = useAuth();
-
   return (
     <div className="min-h-screen bg-terminal">
       <Navbar />
@@ -109,7 +108,7 @@ export default function Home() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 rounded-full border border-primary/30 bg-primary/5 backdrop-blur-sm">
               <Zap className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">AI-Powered Fleet Management</span>
+              <span className="text-sm font-medium text-primary">Dispatch software for UK haulage</span>
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
@@ -118,21 +117,21 @@ export default function Home() {
             </h1>
             
             <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-              Professional fleet management platform with real-time tracking, AI route optimization, and predictive ETA. Built for dispatchers who demand precision.
+              Plan jobs, dispatch drivers, follow them live on the map and collect proof of delivery — in one web app for your office and your drivers' phones.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/pricing">
-                <Button size="lg" className="glow-cyan-sm group">
+              <Button asChild size="lg" className="glow-cyan-sm group">
+                  <Link href="/login?mode=register">
                   Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Link>
                 </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button size="lg" variant="outline" className="border-border hover:border-primary/50 hover:bg-primary/5">
-                  View Dashboard Demo
+              <Button asChild size="lg" variant="outline" className="border-border hover:border-primary/50 hover:bg-primary/5">
+                  <a href="#how-it-works">
+                  See how it works
+                  </a>
                 </Button>
-              </Link>
             </div>
           </div>
         </div>
@@ -159,11 +158,11 @@ export default function Home() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-primary/30 bg-primary/5">
                 <Globe className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium text-primary">Bloomberg-Inspired Interface</span>
+                <span className="text-sm font-medium text-primary">Dispatch Center</span>
               </div>
-              <h2 className="text-4xl font-bold mb-6">Professional Dispatch Center</h2>
+              <h2 className="text-4xl font-bold mb-6">Your whole operation on one screen</h2>
               <p className="text-muted-foreground text-lg mb-8">
-                Our high-density interface is designed for professional dispatchers who need to monitor multiple data points simultaneously. Inspired by trading terminals, every pixel is optimized for efficiency.
+                Jobs, drivers and vehicles side by side with a live map, so dispatchers see what is happening without switching tools.
               </p>
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
@@ -171,8 +170,8 @@ export default function Home() {
                     <ChevronRight className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">Real-time Fleet Visualization</p>
-                    <p className="text-sm text-muted-foreground">Track all vehicles on an interactive map with live position updates</p>
+                    <p className="font-medium">Live map</p>
+                    <p className="text-sm text-muted-foreground">Driver positions with the time of the last update, plus TomTom traffic</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
@@ -180,8 +179,8 @@ export default function Home() {
                     <ChevronRight className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">HGV-Specific Layers</p>
-                    <p className="text-sm text-muted-foreground">Low bridge alerts, weight restrictions, and Clean Air Zone overlays</p>
+                    <p className="font-medium">Truck routing</p>
+                    <p className="text-sm text-muted-foreground">TomTom truck routes using vehicle height and weight, with UK Clean Air Zones marked</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
@@ -189,28 +188,62 @@ export default function Home() {
                     <ChevronRight className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">Live Driver Tracking</p>
-                    <p className="text-sm text-muted-foreground">Real-time GPS positions, speed, heading and automatic geofence arrival alerts</p>
+                    <p className="font-medium">Arrivals and departures</p>
+                    <p className="text-sm text-muted-foreground">Recorded automatically at each pickup, stop and delivery from the driver's shared position</p>
                   </div>
                 </li>
               </ul>
               <div className="mt-8">
-                <Link href="/dashboard">
-                  <Button className="glow-cyan-sm group">
-                    Try Dashboard Demo
+                <Button asChild className="glow-cyan-sm group">
+                    <Link href="/pricing">
+                    Start your free trial
                     <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Link>
                   </Button>
-                </Link>
               </div>
             </div>
-            <div className="relative">
-              <div className="absolute -inset-4 bg-primary/10 rounded-2xl blur-xl" />
-              <img 
-                src="/images/dashboard-preview.jpg" 
-                alt="Movido Dispatch Center Dashboard" 
-                className="relative rounded-xl border border-border shadow-2xl"
-              />
-            </div>
+            <figure className="relative">
+              <div className="absolute -inset-4 bg-primary/10 rounded-2xl blur-xl" aria-hidden="true" />
+              <div className="relative card-terminal overflow-hidden shadow-2xl" aria-hidden="true">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <span className="text-sm font-semibold">Dispatch Center</span>
+                  <span className="flex items-center gap-1.5 text-xs text-green-500"><span className="w-1.5 h-1.5 rounded-full bg-green-500" />Live</span>
+                </div>
+                <div className="grid sm:grid-cols-[1fr_1.1fr]">
+                  <div className="p-3 space-y-2 border-b sm:border-b-0 sm:border-r border-border">
+                    {[
+                      { ref: "JOB-2026-014", route: "Northampton → Leicester", status: "In progress", tone: "text-green-500", stops: "2/4 stops" },
+                      { ref: "JOB-2026-015", route: "Wellingborough → Kettering", status: "Assigned", tone: "text-blue-400", stops: "0/3 stops" },
+                      { ref: "JOB-2026-013", route: "Daventry → Milton Keynes", status: "Delivered", tone: "text-muted-foreground", stops: "POD signed" },
+                    ].map((j) => (
+                      <div key={j.ref} className="rounded-lg border border-border bg-muted/20 p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs text-primary">{j.ref}</span>
+                          <span className={`text-[11px] ${j.tone}`}>{j.status}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{j.route}</p>
+                        <p className="text-[11px] text-muted-foreground/80 mt-0.5">{j.stops}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative min-h-[220px] bg-[#0d1117]">
+                    <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "repeating-linear-gradient(0deg, #00FFD420 0px, transparent 1px, transparent 24px), repeating-linear-gradient(90deg, #00FFD420 0px, transparent 1px, transparent 24px)" }} />
+                    <svg viewBox="0 0 200 160" className="absolute inset-0 w-full h-full">
+                      <path d="M30 130 C 60 100, 80 110, 100 80 S 150 40, 175 30" fill="none" stroke="#00FFD4" strokeOpacity="0.5" strokeWidth="2" strokeDasharray="4 4" />
+                      <circle cx="30" cy="130" r="4" fill="#22c55e" />
+                      <circle cx="100" cy="80" r="4" fill="#6366f1" />
+                      <circle cx="175" cy="30" r="4" fill="#f59e0b" />
+                      <circle cx="72" cy="104" r="6" fill="#00FFD4" />
+                    </svg>
+                    <div className="absolute left-3 bottom-3 rounded-md border border-border bg-background/90 px-2 py-1">
+                      <p className="text-[11px] font-medium">HGV-07 · Sam</p>
+                      <p className="text-[10px] text-muted-foreground">Updated 1 min ago</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption className="relative mt-3 text-center text-xs text-muted-foreground">Illustration of the dispatch screen</figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -220,7 +253,7 @@ export default function Home() {
         <div className="container">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">Everything You Need to Manage Your Fleet</h2>
-            <p className="text-muted-foreground text-lg">Professional-grade tools designed for high-volume logistics operations</p>
+            <p className="text-muted-foreground text-lg">The tools a transport office uses every day, in one place</p>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -255,16 +288,16 @@ export default function Home() {
           <div className="max-w-xl">
             <h2 className="text-4xl font-bold mb-6">Built for British Roads</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Based in Northampton — the heart of UK logistics — Movido is built for British roads. Our platform handles HGV-specific routing, low bridge warnings, weight restrictions, Clean Air Zones, and DVSA compliance. From the M1 corridor to nationwide distribution, we understand UK transport.
+              Based in Northampton, MOViDO is built for UK operators: miles by default, UK time, truck routing through TomTom with your vehicle's height and weight, UK Clean Air Zones marked on the map, and working-time hours recorded per driver.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="card-terminal p-4">
-                <p className="text-2xl font-mono font-bold text-cyan">3.5t - 44t</p>
-                <p className="text-sm text-muted-foreground">Vehicle Weight Support</p>
+                <p className="text-2xl font-mono font-bold text-cyan">Up to 44t</p>
+                <p className="text-sm text-muted-foreground">Vehicle weight in truck routing</p>
               </div>
               <div className="card-terminal p-4">
-                <p className="text-2xl font-mono font-bold text-cyan">UK Wide</p>
-                <p className="text-sm text-muted-foreground">Low Bridge Database</p>
+                <p className="text-2xl font-mono font-bold text-cyan">8</p>
+                <p className="text-sm text-muted-foreground">UK Clean Air Zones marked</p>
               </div>
             </div>
           </div>
@@ -276,7 +309,7 @@ export default function Home() {
         <div className="container">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">How Movido Works</h2>
-            <p className="text-muted-foreground text-lg">Get started in minutes with our streamlined workflow</p>
+            <p className="text-muted-foreground text-lg">From sign-up to your first delivery</p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
@@ -305,23 +338,23 @@ export default function Home() {
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-primary/30 bg-primary/5">
                 <Smartphone className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium text-primary">Movido Driver App</span>
+                <span className="text-sm font-medium text-primary">Driver screen</span>
               </div>
               <h2 className="text-4xl font-bold mb-6">
-                Everything Your Drivers Need — In Their Pocket
+                Everything your drivers need, in their phone's browser
               </h2>
               <p className="text-muted-foreground text-lg mb-8">
-                The Movido Driver App puts professional-grade logistics tools right in your drivers' hands. HGV-aware navigation, digital POD capture, fuel logging, and real-time job updates — all offline-capable.
+                Drivers sign in at movidologistics.uk/driver — no app store, no install. They see their jobs, work through stops and capture proof of delivery.
               </p>
 
               <ul className="space-y-4 mb-10">
                 {[
-                  { icon: Navigation, text: "HGV Navigation via TomTom — truck-safe routes with bridge & weight alerts" },
-                  { icon: Camera, text: "Digital POD — photo capture + customer signature, no paperwork" },
-                  { icon: Clock, text: "WTD Hours tracker — EU driving regulations built-in" },
-                  { icon: Fuel, text: "Fuel log — record every stop with GPS location auto-fill" },
-                  { icon: Bell, text: "Push notifications — instant job assignments & status updates" },
-                  { icon: CheckCircle2, text: "Offline-capable — works in areas with poor signal" },
+                  { icon: Navigation, text: "One tap opens the route in the phone's maps app" },
+                  { icon: Camera, text: "Proof of delivery — photo, signature and recipient name" },
+                  { icon: MapPin, text: "Location sharing while the MOViDO screen is open (phones pause it when the screen is off)" },
+                  { icon: Fuel, text: "Fuel fills and incident reports straight from the cab" },
+                  { icon: MessageSquare, text: "Messages with dispatch" },
+                  { icon: CheckCircle2, text: "Retries automatically when the signal drops" },
                 ].map(({ icon: Icon, text }, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -384,13 +417,13 @@ export default function Home() {
                     {/* Job card */}
                     <div className="bg-[#111118] rounded-xl p-3 border border-[#1a1a24] mb-3">
                       <div className="text-[9px] text-[#666] uppercase tracking-wider mb-1">Current Job</div>
-                      <div className="text-[12px] font-bold text-white">MV-2847</div>
+                      <div className="text-[12px] font-bold text-white">JOB-2026-014</div>
                       <div className="text-[10px] text-[#aaa] mt-1">Northampton → Leicester</div>
                       <div className="flex items-center gap-1 mt-2">
                         <div className="flex-1 h-1 bg-[#1a1a24] rounded-full">
                           <div className="w-3/4 h-1 bg-[#00FFD4] rounded-full" />
                         </div>
-                        <span className="text-[9px] text-[#00FFD4] font-mono">75%</span>
+                        <span className="text-[9px] text-[#00FFD4] font-mono">3/4 stops</span>
                       </div>
                     </div>
 
@@ -401,8 +434,8 @@ export default function Home() {
                       }} />
                       <div className="relative flex flex-col items-center gap-1">
                         <Navigation className="w-6 h-6 text-[#00FFD4]" />
-                        <span className="text-[9px] text-[#00FFD4] font-mono">HGV ROUTE</span>
-                        <span className="text-[8px] text-[#666]">TomTom Navigation</span>
+                        <span className="text-[9px] text-[#00FFD4] font-mono">NEXT STOP</span>
+                        <span className="text-[8px] text-[#666]">Tap to navigate</span>
                       </div>
                       {/* Route line */}
                       <div className="absolute bottom-4 left-6 right-6 h-px bg-[#00FFD4] opacity-40" />
@@ -414,7 +447,7 @@ export default function Home() {
                       {[
                         { icon: "📷", label: "POD" },
                         { icon: "⛽", label: "Fuel" },
-                        { icon: "🛡️", label: "WTD" },
+                        { icon: "💬", label: "Messages" },
                       ].map((btn) => (
                         <div key={btn.label} className="bg-[#111118] rounded-lg p-2 text-center border border-[#1a1a24]">
                           <div className="text-sm mb-1">{btn.icon}</div>
@@ -426,12 +459,12 @@ export default function Home() {
                 </div>
 
                 {/* HGV Badge */}
-                <div className="absolute -right-4 top-24 bg-[#111118] border border-[#00FFD430] rounded-xl px-3 py-2 shadow-lg">
+                <div className="absolute -right-4 top-56 bg-[#111118] border border-[#00FFD430] rounded-xl px-3 py-2 shadow-lg">
                   <div className="flex items-center gap-2">
                     <Truck className="w-4 h-4 text-[#00FFD4]" />
                     <div>
-                      <p className="text-[10px] text-[#00FFD4] font-mono font-bold">HGV Safe</p>
-                      <p className="text-[9px] text-[#666]">TomTom routing</p>
+                      <p className="text-[10px] text-[#00FFD4] font-mono font-bold">Live location</p>
+                      <p className="text-[9px] text-[#666]">Shared with dispatch</p>
                     </div>
                   </div>
                 </div>
@@ -457,21 +490,16 @@ export default function Home() {
         <div className="absolute inset-0 grid-pattern opacity-30" />
         <div className="container relative">
           <div className="max-w-3xl mx-auto text-center">
-            <img 
-              src="/images/ai-optimization.jpg" 
-              alt="AI Route Optimization" 
-              className="w-48 h-48 mx-auto mb-8 rounded-xl border border-primary/30"
-            />
-            <h2 className="text-4xl font-bold mb-4">Ready to Optimize Your Fleet?</h2>
+            <h2 className="text-4xl font-bold mb-4">Try MOViDO with your own fleet</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Join logistics companies that trust Movido for their dispatch operations. Start your free trial today.
+              Create your company account and run real jobs free for 14 days.
             </p>
-            <Link href="/pricing">
-              <Button size="lg" className="glow-cyan group">
+            <Button asChild size="lg" className="glow-cyan group">
+                <Link href="/login?mode=register">
                 Start Free Trial
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Link>
               </Button>
-            </Link>
           </div>
         </div>
       </section>

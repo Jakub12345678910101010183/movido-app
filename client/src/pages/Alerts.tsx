@@ -162,7 +162,7 @@ export default function Alerts() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className={`card-terminal p-4 ${criticalCount > 0 ? "border-red-500/30" : ""}`}>
             <div className="flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-red-500" /><span className="text-xs text-red-500">Critical</span></div>
             <p className="text-2xl font-mono font-bold text-red-500">{criticalCount}</p>
@@ -184,7 +184,7 @@ export default function Alerts() {
         {/* Filters */}
         <div className="flex items-center gap-3 mb-6">
           <Select value={filterSeverity} onValueChange={setFilterSeverity}>
-            <SelectTrigger className="w-36 bg-muted/30"><Filter className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-44 bg-muted/30" aria-label="Severity"><Filter className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">All Severity</SelectItem><SelectItem value="critical">Critical</SelectItem><SelectItem value="warning">Warning</SelectItem><SelectItem value="info">Info</SelectItem></SelectContent>
           </Select>
           <Select value={filterType} onValueChange={setFilterType}>
@@ -226,7 +226,7 @@ export default function Alerts() {
                         <ExternalLink className="w-3 h-3 mr-1" />View
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => setDismissed((prev) => new Set(prev).add(alert.id))}>
+                    <Button variant="ghost" size="icon" aria-label="Dismiss alert" onClick={() => setDismissed((prev) => new Set(prev).add(alert.id))}>
                       <X className="w-4 h-4" />
                     </Button>
                   </div>

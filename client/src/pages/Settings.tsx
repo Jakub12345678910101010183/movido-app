@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 import { supabase } from "@/lib/supabase";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Settings() {
   const { user, profile, signOut } = useAuthContext();
@@ -44,28 +44,20 @@ export default function Settings() {
     return stored !== 'km';
   });
 
-  // Other settings
-  const [showLowBridges, setShowLowBridges] = useState(() => {
-    return localStorage.getItem('movido-show-bridges') !== 'false';
-  });
-
   const [showCAZ, setShowCAZ] = useState(() => {
-    return localStorage.getItem('movido-show-caz') !== 'false';
+    try { return localStorage.getItem('movido-show-caz') !== 'false'; } catch { return true; }
   });
 
-  const [notifications, setNotifications] = useState(() => {
-    return localStorage.getItem('movido-notifications') !== 'false';
-  });
-
-  const [darkMode, setDarkMode] = useState(true);
   const [dieselPrice, setDieselPrice] = useState('1.85');
 
   const saveSettings = () => {
-    localStorage.setItem('movido-distance-unit', useMiles ? 'miles' : 'km');
-    localStorage.setItem('movido-show-bridges', showLowBridges.toString());
-    localStorage.setItem('movido-show-caz', showCAZ.toString());
-    localStorage.setItem('movido-notifications', notifications.toString());
-    toast.success('Settings saved successfully');
+    try {
+      localStorage.setItem('movido-distance-unit', useMiles ? 'miles' : 'km');
+      localStorage.setItem('movido-show-caz', showCAZ.toString());
+      toast.success('Display preferences saved on this device');
+    } catch {
+      toast.error('This browser does not allow saving preferences');
+    }
   };
 
   useEffect(() => {
@@ -131,7 +123,7 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="font-semibold">Your Account</h2>
-                <p className="text-xs text-muted-foreground">Supabase authentication</p>
+                <p className="text-xs text-muted-foreground">Your sign-in details</p>
               </div>
             </div>
 
@@ -224,6 +216,7 @@ export default function Settings() {
                 <div className="flex items-center gap-3">
                   <span className={`text-sm ${useMiles ? 'text-primary font-medium' : 'text-muted-foreground'}`}>Miles</span>
                   <Switch
+                    aria-label="Use kilometres"
                     checked={!useMiles}
                     onCheckedChange={(checked) => setUseMiles(!checked)}
                   />
@@ -247,135 +240,34 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">System timezone</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-muted-foreground">Europe/London (GMT)</span>
+                  <span className="font-mono text-muted-foreground">Europe/London (UK time)</span>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* Map & HGV Settings */}
+          {/* Map */}
           <section className="card-terminal p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Map className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h2 className="font-semibold">Map & HGV Layers</h2>
-                <p className="text-xs text-muted-foreground">TomTom integration settings</p>
+                <h2 className="font-semibold">Map</h2>
+                <p className="text-xs text-muted-foreground">Dispatch map display</p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-muted/30">
                 <div>
-                  <p className="font-medium">Low Bridge Warnings</p>
-                  <p className="text-sm text-muted-foreground">Show UK low bridge database overlay</p>
+                  <p className="font-medium" id="caz-label">Clean Air Zones</p>
+                  <p className="text-sm text-muted-foreground">Mark UK charging zones on the dispatch map</p>
                 </div>
-                <Switch
-                  checked={showLowBridges}
-                  onCheckedChange={setShowLowBridges}
-                />
+                <Switch checked={showCAZ} onCheckedChange={setShowCAZ} aria-labelledby="caz-label" />
               </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">Clean Air Zones (CAZ/ULEZ)</p>
-                  <p className="text-sm text-muted-foreground">Display UK Clean Air Zone boundaries</p>
-                </div>
-                <Switch
-                  checked={showCAZ}
-                  onCheckedChange={setShowCAZ}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">HGV-Optimized Routes</p>
-                  <p className="text-sm text-muted-foreground">Avoid unsuitable roads for heavy vehicles</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="p-4 rounded-lg bg-primary/5 border border-primary/30">
-                <p className="text-sm text-muted-foreground">
-                  <strong className="text-primary">Satellite View:</strong> Use the three-click navigation in the Dashboard map controls to toggle satellite imagery.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Notifications */}
-          <section className="card-terminal p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Bell className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-semibold">Notifications</h2>
-                <p className="text-xs text-muted-foreground">Alert preferences</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">Safety Alerts</p>
-                  <p className="text-sm text-muted-foreground">Low bridges, weight limits, CAZ entries</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">Delivery Updates</p>
-                  <p className="text-sm text-muted-foreground">POD confirmations, ETA changes</p>
-                </div>
-                <Switch
-                  checked={notifications}
-                  onCheckedChange={setNotifications}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">Maintenance Reminders</p>
-                  <p className="text-sm text-muted-foreground">Service due, MOT expiry alerts</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-            </div>
-          </section>
-
-          {/* Appearance */}
-          <section className="card-terminal p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Moon className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-semibold">Appearance</h2>
-                <p className="text-xs text-muted-foreground">Interface theme</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
-                <div>
-                  <p className="font-medium">Dark Mode</p>
-                  <p className="text-sm text-muted-foreground">Bloomberg-inspired dark interface</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Sun className="w-4 h-4 text-muted-foreground" />
-                  <Switch
-                    checked={darkMode}
-                    onCheckedChange={setDarkMode}
-                    disabled
-                  />
-                  <Moon className="w-4 h-4 text-primary" />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Dark mode is optimized for professional dispatch operations and cannot be disabled.
+              <p className="text-sm text-muted-foreground">
+                Routes are always calculated for trucks with TomTom, using the height and weight entered in the route planner.
               </p>
             </div>
           </section>
@@ -383,61 +275,52 @@ export default function Settings() {
           {/* Fuel Prices */}
           <section className="card-terminal p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Fuel className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Fuel Prices</h2>
-                <p className="text-sm text-gray-500">Update diesel price for route cost calculations</p>
+                <h2 className="font-semibold">Fuel Price</h2>
+                <p className="text-xs text-muted-foreground">Used for route cost estimates</p>
               </div>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Diesel Price per Litre (£)
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.50"
-                    max="5.00"
-                    value={dieselPrice}
-                    onChange={(e) => setDieselPrice(e.target.value)}
-                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <span className="text-sm text-gray-500">
-                    per litre · HGV est. £{(parseFloat(dieselPrice || '1.85') * 0.57).toFixed(2)}/mile
-                  </span>
-                </div>
-                <button
-                  onClick={saveDieselPrice}
-                  className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors font-medium"
-                >
-                  Save Fuel Price
-                </button>
+            <div className="space-y-3">
+              <Label htmlFor="diesel-price">Diesel price per litre (£)</Label>
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  id="diesel-price"
+                  type="number"
+                  step="0.01"
+                  min="0.50"
+                  max="5.00"
+                  value={dieselPrice}
+                  onChange={(e) => setDieselPrice(e.target.value)}
+                  className="w-32 font-mono"
+                />
+                <span className="text-sm text-muted-foreground">
+                  HGV estimate £{(parseFloat(dieselPrice || '1.85') * 0.57).toFixed(2)}/mile
+                </span>
               </div>
+              <Button variant="outline" onClick={saveDieselPrice}>Save fuel price</Button>
             </div>
           </section>
-          {/* AI Route Planning */}
-          <section className="card-terminal p-6 border border-cyan-500/30 bg-cyan-500/5">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <Brain className="w-5 h-5 text-cyan-500" />
+
+          {/* Route planning */}
+          <section className="card-terminal p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h2 className="font-semibold text-cyan-400">AI Route Planning</h2>
-                <p className="text-xs text-muted-foreground">Intelligent route optimization and sequencing</p>
+                <h2 className="font-semibold">Route Planner</h2>
+                <p className="text-xs text-muted-foreground">Stop sequencing with live-traffic truck routing</p>
               </div>
             </div>
-
-            <p className="text-sm text-muted-foreground mb-6">
-              Use our AI-powered route planner to automatically optimize stop sequencing based on traffic conditions, HGV restrictions, and delivery priorities. Movido AI intelligently sequences your jobs to minimize travel time and cost.
+            <p className="text-sm text-muted-foreground mb-4">
+              Add stops and MOViDO orders them for the shortest drive, then calculates the truck route with TomTom using live traffic and your vehicle's height and weight.
             </p>
-
-            <Button onClick={() => setShowAIPlanner(true)} className="glow-cyan-sm">
+            <Button variant="outline" onClick={() => setShowAIPlanner(true)}>
               <Brain className="w-4 h-4 mr-2" />
-              Plan New AI Route
+              Open route planner
             </Button>
           </section>
 
@@ -445,12 +328,12 @@ export default function Settings() {
           <div className="flex justify-end">
             <Button onClick={saveSettings} className="glow-cyan-sm">
               <Save className="w-4 h-4 mr-2" />
-              Save Settings
+              Save display preferences
             </Button>
           </div>
         </div>
 
-        <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} onSaveJob={() => {}} />
+        <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} />
       </div>
     </DashboardLayout>
   );
@@ -548,7 +431,10 @@ function CompanyDetails({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs text-muted-foreground capitalize">Plan: {plan}</p>
+        <p className="text-xs text-muted-foreground">
+          <span className="capitalize">Plan: {plan}</span>
+          {canEdit && <> · <Link href="/pricing" className="text-primary hover:underline">View plans and subscribe</Link></>}
+        </p>
         {canEdit && (
           <Button variant="outline" size="sm" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}

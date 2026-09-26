@@ -32,22 +32,23 @@ import Footer from "@/components/Footer";
 const plans = [
   {
     name: "Starter",
-    description: "Perfect for small fleets getting started with digital dispatch",
+    description: "Digital dispatch for small fleets",
     price: 19,
     icon: Truck,
     stripePriceMonthly: import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY as string,
     stripePriceAnnual: import.meta.env.VITE_STRIPE_PRICE_STARTER_ANNUAL as string,
     features: [
-      "Live Fleet Tracking & Map",
-      "Basic Job Dispatch",
-      "ETA Dashboard",
-      "Driver Mobile App Access",
-      "Email Support",
+      "Jobs with multiple stops and dispatch",
+      "Live driver map",
+      "Driver screen in the phone's browser",
+      "Proof of delivery (photo + signature)",
+      "Customer tracking links",
+      "Email support",
     ],
   },
   {
     name: "Professional",
-    description: "Advanced tools for growing logistics operations",
+    description: "Planning and reporting for growing operations",
     price: 35,
     icon: Zap,
     popular: true,
@@ -55,27 +56,25 @@ const plans = [
     stripePriceAnnual: import.meta.env.VITE_STRIPE_PRICE_PRO_ANNUAL as string,
     features: [
       "Everything in Starter, plus:",
-      "AI Route Optimizer with TomTom Navigation",
-      "Low Bridge Alerts & Vehicle Constraints (3.5t - 44t)",
-      "Digital POD (Proof of Delivery)",
-      "One-tap Driver Check-in",
-      "Predictive ETA with Traffic",
-      "Priority Support",
+      "Route planner with TomTom truck routing and live traffic",
+      "Automatic arrival and departure records",
+      "Analytics, reports and CSV export",
+      "Incidents, fuel logs and maintenance",
+      "Document scanner",
+      "Priority email support",
     ],
   },
   {
     name: "Enterprise",
-    description: "Custom solutions for large-scale fleet operations",
+    description: "For larger fleets with specific requirements",
     price: null,
     icon: Building2,
     features: [
       "Everything in Professional, plus:",
-      "Customer Tracking Portal",
-      "Advanced Fuel & Cost Analytics",
-      "24/7 Technical Support",
-      "Unlimited Route History",
-      "Custom Integrations",
-      "Dedicated Account Manager",
+      "Volume pricing",
+      "Help moving your data in",
+      "Integrations quoted on request",
+      "Support terms agreed with you",
     ],
   },
 ];
@@ -83,19 +82,19 @@ const plans = [
 const faqs = [
   {
     question: "How is pricing calculated?",
-    answer: "Pricing is per vehicle in your active fleet. You only pay for vehicles that are actively tracked and dispatched."
+    answer: "Pricing is per vehicle per month. At checkout the quantity starts at the number of vehicles in your account, and you can adjust it."
   },
   {
-    question: "Can I switch plans anytime?",
-    answer: "Yes, you can upgrade or downgrade your plan at any time. Changes take effect at the start of your next billing cycle."
+    question: "Can I change plans later?",
+    answer: "Yes. Contact us and we will move your subscription to the plan you need."
   },
   {
     question: "Is there a free trial?",
-    answer: "Yes, all plans come with a 14-day free trial. No credit card required to start."
+    answer: "Yes. Every new company account gets a 14-day free trial with all features. No card is needed to start — you subscribe when you are ready."
   },
   {
     question: "Do you support UK-specific requirements?",
-    answer: "Absolutely. Our platform is optimised for British roads, including low bridge alerts, weight restrictions, and compliance with UK transport regulations."
+    answer: "MOViDO uses miles and UK time, calculates truck routes with TomTom using your vehicle's height and weight, marks UK Clean Air Zones, and records working-time hours per driver. It is not a tachograph and does not replace your legal records."
   },
 ];
 
@@ -108,7 +107,7 @@ export default function Pricing() {
   // Stripe Checkout — redirects to Stripe-hosted payment page
   const handleCheckout = async (plan: typeof plans[0]) => {
     if (!plan.price) {
-      window.location.href = "mailto:sales@movidologistics.com?subject=Enterprise%20Plan%20Enquiry";
+      window.location.href = "mailto:movidologistics@gmail.com?subject=Enterprise%20Plan%20Enquiry";
       return;
     }
 
@@ -160,10 +159,13 @@ export default function Pricing() {
   const [fuelCostPerMile, setFuelCostPerMile] = useState(1.05);
   const [dispatchHoursPerDay, setDispatchHoursPerDay] = useState(4);
   const [hourlyDispatchCost, setHourlyDispatchCost] = useState(18);
+  const [fuelSavingPct, setFuelSavingPct] = useState(5);
+  const [timeSavingPct, setTimeSavingPct] = useState(10);
 
   // ROI Calculations
-  const fuelSavingsPercent = 0.15; // 15% fuel savings
-  const timeSavingsPercent = 0.30; // 30% dispatch time savings
+  // The visitor's own estimates — MOViDO makes no savings claim.
+  const fuelSavingsPercent = fuelSavingPct / 100;
+  const timeSavingsPercent = timeSavingPct / 100;
   
   const monthlyFuelCost = fleetSize * avgMilesPerDay * fuelCostPerMile * 22; // 22 working days
   const monthlyFuelSavings = monthlyFuelCost * fuelSavingsPercent;
@@ -187,18 +189,17 @@ export default function Pricing() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-primary/30 bg-primary/5">
               <Globe className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">Serving fleets across the United Kingdom</span>
+              <span className="text-sm font-medium text-primary">Built for UK fleets</span>
             </div>
             <h1 className="text-5xl font-bold mb-4">Simple, Transparent Pricing</h1>
             <p className="text-xl text-muted-foreground mb-8">
-              Choose the plan that fits your fleet. Scale as you grow with no hidden fees.
+              Per vehicle, per month. Start with a 14-day free trial.
             </p>
-            <p className="text-primary text-sm">Personalised onboarding for fleets across the United Kingdom</p>
             
             {/* Billing Toggle */}
             <div className="flex items-center justify-center gap-4 mt-8">
               <span className={`text-sm ${!isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
-              <Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
+              <Switch checked={isAnnual} onCheckedChange={setIsAnnual} aria-label="Annual billing" />
               <span className={`text-sm ${isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Annual</span>
             </div>
           </div>
@@ -279,7 +280,7 @@ export default function Pricing() {
             </div>
             <h2 className="text-4xl font-bold mb-4">Calculate Your Savings</h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              See how much you could save with Movido's AI-powered route optimization
+              An illustration using your own figures. Savings depend on your operation and are not guaranteed.
             </p>
           </div>
 
@@ -362,12 +363,28 @@ export default function Pricing() {
                   className="py-2"
                 />
               </div>
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-sm text-muted-foreground">Your expected fuel saving</label>
+                  <span className="font-mono text-primary">{fuelSavingPct}%</span>
+                </div>
+                <Slider value={[fuelSavingPct]} onValueChange={(v) => setFuelSavingPct(v[0])} min={0} max={20} step={1} className="py-2" aria-label="Expected fuel saving" />
+              </div>
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-sm text-muted-foreground">Your expected planning time saving</label>
+                  <span className="font-mono text-primary">{timeSavingPct}%</span>
+                </div>
+                <Slider value={[timeSavingPct]} onValueChange={(v) => setTimeSavingPct(v[0])} min={0} max={50} step={1} className="py-2" aria-label="Expected planning time saving" />
+              </div>
             </div>
 
             {/* Results */}
             <div className="space-y-6">
               <div className="card-terminal p-6">
-                <h3 className="font-semibold text-lg mb-6">Monthly Savings Breakdown</h3>
+                <h3 className="font-semibold text-lg mb-6">Illustrative monthly figures</h3>
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
@@ -375,7 +392,7 @@ export default function Pricing() {
                       <Fuel className="w-5 h-5 text-primary" />
                       <div>
                         <p className="font-medium">Fuel Savings</p>
-                        <p className="text-xs text-muted-foreground">15% reduction in fuel costs</p>
+                        <p className="text-xs text-muted-foreground">{fuelSavingPct}% of fuel cost (your estimate)</p>
                       </div>
                     </div>
                     <span className="font-mono text-lg text-green-500">+£{monthlyFuelSavings.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</span>
@@ -386,7 +403,7 @@ export default function Pricing() {
                       <Clock className="w-5 h-5 text-primary" />
                       <div>
                         <p className="font-medium">Time Savings</p>
-                        <p className="text-xs text-muted-foreground">30% faster dispatch planning</p>
+                        <p className="text-xs text-muted-foreground">{timeSavingPct}% of planning time (your estimate)</p>
                       </div>
                     </div>
                     <span className="font-mono text-lg text-green-500">+£{monthlyTimeSavings.toLocaleString('en-GB', { maximumFractionDigits: 0 })}</span>
@@ -441,7 +458,7 @@ export default function Pricing() {
         <div className="container">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold mb-2">Questions? We're here to help</h2>
-            <p className="text-muted-foreground">Our UK-based team is ready to assist you with any questions about our plans or features.</p>
+            <p className="text-muted-foreground">Get in touch about plans, features or a walkthrough.</p>
           </div>
           <div className="flex flex-col sm:flex-row justify-center gap-6">
             <a href="mailto:movidologistics@gmail.com" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
@@ -461,7 +478,7 @@ export default function Pricing() {
         <div className="container">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-4">About Movido</h2>
-            <p className="text-muted-foreground">Next-generation fleet management for the United Kingdom</p>
+            <p className="text-muted-foreground">Dispatch software for UK transport operators</p>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
@@ -471,7 +488,7 @@ export default function Pricing() {
               </div>
               <h3 className="font-semibold mb-2">UK-Based Operations</h3>
               <p className="text-sm text-muted-foreground">
-                Located in the heart of British logistics, Movido is a next-generation AI platform serving fleets across the United Kingdom. Our central location gives us unique insight into the challenges facing UK transport operators.
+                MOViDO is based in Northampton and built around how UK transport offices work: jobs, drivers, vehicles, proof of delivery and working-time hours in one place.
               </p>
             </div>
             
@@ -479,9 +496,9 @@ export default function Pricing() {
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Globe className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="font-semibold mb-2">TomTom Partnership</h3>
+              <h3 className="font-semibold mb-2">Maps and routing by TomTom</h3>
               <p className="text-sm text-muted-foreground">
-                Powered by TomTom's industry-leading navigation technology, our platform delivers accurate routing optimised for British roads, regulations, and vehicle restrictions including low bridges and weight limits.
+                Maps, live traffic and truck routes come from TomTom. Routes take your vehicle's height and weight into account.
               </p>
             </div>
             
@@ -489,9 +506,9 @@ export default function Pricing() {
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Zap className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="font-semibold mb-2">Bloomberg-Inspired Interface</h3>
+              <h3 className="font-semibold mb-2">Office and drivers, one system</h3>
               <p className="text-sm text-muted-foreground">
-                Our dispatcher interface is inspired by professional trading terminals, delivering high-density information displays that allow operators to monitor multiple data points simultaneously. Built for dispatchers who demand precision and efficiency.
+                Dispatch works on a desktop; drivers use the same system in their phone's browser. Every company's data is kept separate from every other company's.
               </p>
             </div>
           </div>
@@ -521,14 +538,16 @@ export default function Pricing() {
         <div className="absolute inset-0 grid-pattern opacity-30" />
         <div className="container relative">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl font-bold mb-4">Ready to optimise your fleet?</h2>
+            <h2 className="text-4xl font-bold mb-4">Try MOViDO with your own fleet</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Start your 14-day free trial today. No credit card required.
+              Start your 14-day free trial today. No card needed.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="glow-cyan" onClick={() => handleCheckout(plans[1])}>
-                Start Free Trial
-              </Button>
+              <Button asChild size="lg" className="glow-cyan w-full">
+                  <Link href="/login?mode=register">
+                  Start Free Trial
+                  </Link>
+                </Button>
               <Button size="lg" variant="outline" onClick={() => window.location.href = 'mailto:movidologistics@gmail.com?subject=Sales%20Enquiry'}>
                 Contact Sales
               </Button>

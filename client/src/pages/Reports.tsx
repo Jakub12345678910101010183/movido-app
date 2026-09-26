@@ -258,12 +258,12 @@ export default function Reports() {
     <DashboardLayout>
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div><h1 className="text-2xl font-bold">Reports</h1><p className="text-sm text-muted-foreground mt-1">Generate CSV reports from live Supabase data</p></div>
+          <div><h1 className="text-2xl font-bold">Reports</h1><p className="text-sm text-muted-foreground mt-1">Download CSV reports of your jobs, fleet and drivers</p></div>
           <Button className="glow-cyan-sm" onClick={() => setShowGenerate(true)}><Plus className="w-4 h-4 mr-2" />Generate Report</Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Generated</p><p className="text-2xl font-mono font-bold text-cyan">{reports.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Rows</p><p className="text-2xl font-mono font-bold text-green-500">{totalRows}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Vehicles</p><p className="text-2xl font-mono font-bold text-blue-500">{vehicles.length}</p></div>
@@ -271,7 +271,7 @@ export default function Reports() {
         </div>
 
         {/* Report Types Grid */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {reportTypes.map((rt) => {
             const Icon = rt.icon;
             return (
@@ -331,7 +331,7 @@ export default function Reports() {
                 </Select>
               </div>
               <div><Label>Report Name (optional)</Label><Input className="mt-1.5 bg-muted/30" placeholder="Auto-generated if empty" value={reportName} onChange={(e) => setReportName(e.target.value)} /></div>
-              <p className="text-xs text-muted-foreground">Data will be exported from your live Supabase database as CSV.</p>
+              <p className="text-xs text-muted-foreground">The report is downloaded as a CSV file from your current data.</p>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowGenerate(false)}>Cancel</Button>

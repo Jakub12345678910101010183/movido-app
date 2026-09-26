@@ -351,14 +351,14 @@ export default function Jobs() {
           <Button className="glow-cyan-sm" onClick={openAdd}><Plus className="w-4 h-4 mr-2" />Add New Job</Button>
         </div>
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by reference, customer, address..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by reference, customer, address..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-muted/30"><Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="assigned">Assigned</SelectItem><SelectItem value="in_progress">In Progress</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
           <Button variant="outline" size="icon" title="Export CSV" aria-label="Export jobs as CSV" onClick={exportCsv}><Download className="w-4 h-4" /></Button>
         </div>
 
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Jobs</p><p className="text-2xl font-mono font-bold text-cyan">{jobs.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">In Progress</p><p className="text-2xl font-mono font-bold text-blue-500">{jobs.filter(j => j.status === "in_progress").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Assigned</p><p className="text-2xl font-mono font-bold text-cyan">{jobs.filter(j => j.status === "assigned").length}</p></div>
@@ -388,14 +388,14 @@ export default function Jobs() {
               <tbody>
                 {filteredJobs.map((job) => (
                   <tr key={job.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="p-4"><span className="font-mono text-sm text-primary">{job.reference}</span></td>
+                    <td className="p-4 whitespace-nowrap"><span className="font-mono text-sm text-primary">{job.reference}</span></td>
                     <td className="p-4"><span className="text-sm">{job.customer}</span></td>
-                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full border ${statusColors[job.status] || ""}`}>{statusLabels[job.status] || job.status}</span></td>
-                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[job.priority] || ""}`}>{priorityLabels[job.priority] || job.priority}</span></td>
+                    <td className="p-4 whitespace-nowrap"><span className={`text-xs px-2 py-1 rounded-full border ${statusColors[job.status] || ""}`}>{statusLabels[job.status] || job.status}</span></td>
+                    <td className="p-4 whitespace-nowrap"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[job.priority] || ""}`}>{priorityLabels[job.priority] || job.priority}</span></td>
                     <td className="p-4"><div className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="w-3 h-3" /><span className="truncate max-w-[150px]">{job.pickup_address || "-"}</span></div></td>
                     <td className="p-4"><div className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="w-3 h-3" /><span className="truncate max-w-[150px]">{job.delivery_address || "-"}</span></div></td>
                     <td className="p-4"><div className="flex items-center gap-1 text-sm"><Clock className="w-3 h-3 text-muted-foreground" /><span className="font-mono">{job.eta ? new Date(job.eta).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "TBD"}</span></div></td>
-                    <td className="p-4"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="icon" title="View details" onClick={() => openDetail(job)}><Eye className="w-3 h-3" /></Button>{job.tracking_token && <Button variant="outline" size="icon" title="Copy tracking link" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/track/${job.tracking_token}`); toast.success("Tracking link copied!"); }}><Link2 className="w-3 h-3" /></Button>}<Button variant="outline" size="sm" onClick={() => openEdit(job)}><Edit className="w-3 h-3 mr-1" />Edit</Button><Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" onClick={() => { setSelectedJobId(job.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button></div></td>
+                    <td className="p-4"><div className="flex items-center justify-end gap-2 whitespace-nowrap"><Button variant="outline" size="icon" aria-label="View details" title="View details" onClick={() => openDetail(job)}><Eye className="w-3 h-3" /></Button>{job.tracking_token && <Button variant="outline" size="icon" aria-label="Copy tracking link" title="Copy tracking link" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/track/${job.tracking_token}`); toast.success("Tracking link copied!"); }}><Link2 className="w-3 h-3" /></Button>}<Button variant="outline" size="sm" onClick={() => openEdit(job)}><Edit className="w-3 h-3 mr-1" />Edit</Button><Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" aria-label={`Delete ${job.reference}`} onClick={() => { setSelectedJobId(job.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button></div></td>
                   </tr>
                 ))}
               </tbody>
