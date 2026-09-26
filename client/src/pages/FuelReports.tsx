@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Fuel, Search, Filter, RefreshCw, Loader2,
-  TrendingDown, Pound, Droplets, User, Truck,
+  TrendingDown, PoundSterling, Droplets, User, Truck,
   MapPin, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";

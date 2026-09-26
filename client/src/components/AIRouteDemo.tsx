@@ -1,48 +1,116 @@
 /**
  * AI Route Demo Component - Terminal Noir Design
- * Interactive demo showing AI route optimization for 10+ UK drops
+ * Interactive demo: sequencing an 8-drop multi-stop route out of Northampton.
+ *
+ * The demo is illustrative, but its numbers are not invented: distances are
+ * great-circle legs between the real coordinates below, scaled by a typical
+ * UK road-to-crow-flies factor, and the "optimised" order is computed in the
+ * browser (nearest neighbour + 2-opt). The product itself is not limited to
+ * eight stops — this is simply the demo route.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { 
-  Zap, 
-  MapPin, 
-  Clock, 
+import {
+  Zap,
+  MapPin,
   TrendingDown,
   Play,
   RotateCcw,
   CheckCircle2
 } from "lucide-react";
 
-// Sample UK delivery locations (dynamic, not hardcoded to specific city)
-const sampleDrops = [
-  { id: 1, name: "Tesco DC, Didcot", address: "Didcot, Oxfordshire, OX11 7HJ", lat: 51.5074, lng: -0.1278 },
-  { id: 2, name: "Amazon MK1, Ridgmont", address: "Ridgmont, Bedfordshire, MK43 0ZA", lat: 51.4545, lng: -0.9781 },
-  { id: 3, name: "DHL Hub, Swindon", address: "Swindon, Wiltshire, SN3 4TN", lat: 51.7520, lng: -1.2577 },
-  { id: 4, name: "B&Q DC, Birmingham", address: "Erdington, Birmingham, B24 9QR", lat: 52.4862, lng: -1.8904 },
-  { id: 5, name: "Howdens, Nottingham", address: "Colwick, Nottingham, NG4 2JR", lat: 52.9548, lng: -1.1581 },
-  { id: 6, name: "Royal Mail MC, Manchester", address: "Oldham Road, Manchester, M40 3AB", lat: 53.4808, lng: -2.2426 },
-  { id: 7, name: "Argos DC, Leeds", address: "Skelton Grange, Leeds, LS10 1RG", lat: 53.8008, lng: -1.5491 },
-  { id: 8, name: "Screwfix, Newcastle", address: "Team Valley, Gateshead, NE11 0QH", lat: 54.9783, lng: -1.6178 },
-  { id: 9, name: "M&S Depot, Edinburgh", address: "Newbridge, Edinburgh, EH28 8PP", lat: 55.9533, lng: -3.1883 },
-  { id: 10, name: "John Lewis, Sheffield", address: "Meadowhall, Sheffield, S9 1EP", lat: 53.3811, lng: -1.4701 },
-  { id: 11, name: "Marks & Spencer, Leicester", address: "Castle Marina, Leicester, LE1 4FQ", lat: 52.6369, lng: -1.1398 },
-  { id: 12, name: "Final Drop, Gloucester", address: "Gloucester Business Park, GL3 4AJ", lat: 51.8994, lng: -2.0783 },
+type Drop = { id: number; name: string; address: string; lat: number; lng: number };
+
+const DEPOT: Drop = {
+  id: 0,
+  name: "Movido Depot, Northampton",
+  address: "Brackmills Industrial Estate, Northampton, NN4 7PB",
+  lat: 52.2213,
+  lng: -0.8573,
+};
+
+// Eight real distribution sites, listed in the order a customer sent them.
+const sampleDrops: Drop[] = [
+  { id: 1, name: "DHL Supply Chain, Daventry", address: "DIRFT, Daventry, NN6 7GX", lat: 52.3308, lng: -1.1805 },
+  { id: 2, name: "Tesco DC, Milton Keynes", address: "Magna Park, Milton Keynes, MK17 8EW", lat: 52.0100, lng: -0.6720 },
+  { id: 3, name: "Screwfix DC, Wellingborough", address: "Park Farm, Wellingborough, NN8 6UW", lat: 52.3196, lng: -0.6598 },
+  { id: 4, name: "Amazon BHX4, Coventry", address: "Ansty Park, Coventry, CV7 9RE", lat: 52.4300, lng: -1.4000 },
+  { id: 5, name: "Boots DC, Kettering", address: "Telford Way, Kettering, NN16 8UN", lat: 52.4080, lng: -0.7390 },
+  { id: 6, name: "Asda DC, Lutterworth", address: "Magna Park, Lutterworth, LE17 4XT", lat: 52.4400, lng: -1.2300 },
+  { id: 7, name: "Sainsbury's DC, Rugby", address: "Swift Valley, Rugby, CV21 1QN", lat: 52.3930, lng: -1.2650 },
+  { id: 8, name: "Royal Mail, Northampton", address: "Crossley Park, Northampton, NN4 7RE", lat: 52.2240, lng: -0.8660 },
 ];
+
+const ROAD_FACTOR = 1.25; // typical UK road distance vs straight line
+const AVG_HGV_MPH = 45;
+
+function legMiles(a: Drop, b: Drop): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 3958.8 * 2 * Math.asin(Math.sqrt(h)) * ROAD_FACTOR;
+}
+
+/** Depot → drops in the given order → back to depot. */
+function routeMiles(order: Drop[]): number {
+  const path = [DEPOT, ...order, DEPOT];
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += legMiles(path[i - 1], path[i]);
+  return total;
+}
+
+function optimise(drops: Drop[]): Drop[] {
+  // Nearest neighbour from the depot…
+  const remaining = [...drops];
+  const order: Drop[] = [];
+  let current = DEPOT;
+  while (remaining.length) {
+    let best = 0;
+    for (let i = 1; i < remaining.length; i++) {
+      if (legMiles(current, remaining[i]) < legMiles(current, remaining[best])) best = i;
+    }
+    current = remaining.splice(best, 1)[0];
+    order.push(current);
+  }
+  // …then 2-opt until no reversal shortens the tour.
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < order.length - 1; i++) {
+      for (let k = i + 1; k < order.length; k++) {
+        const candidate = [...order.slice(0, i), ...order.slice(i, k + 1).reverse(), ...order.slice(k + 1)];
+        if (routeMiles(candidate) + 1e-9 < routeMiles(order)) {
+          order.splice(0, order.length, ...candidate);
+          improved = true;
+        }
+      }
+    }
+  }
+  return order;
+}
+
+function formatDuration(miles: number): string {
+  const minutes = Math.round((miles / AVG_HGV_MPH) * 60);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
 
 export default function AIRouteDemo() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isOptimized, setIsOptimized] = useState(false);
   const [progress, setProgress] = useState(0);
   const [optimizedOrder, setOptimizedOrder] = useState<number[]>([]);
-  
-  // Metrics
-  const originalDistance = 847;
-  const optimizedDistance = 612;
-  const originalTime = "14h 32m";
-  const optimizedTime = "10h 18m";
+
+  const optimisedRoute = useMemo(() => optimise(sampleDrops), []);
+  const originalDistance = Math.round(routeMiles(sampleDrops));
+  const optimizedDistance = Math.round(routeMiles(optimisedRoute));
+  const originalTime = formatDuration(originalDistance);
+  const optimizedTime = formatDuration(optimizedDistance);
   const savings = Math.round(((originalDistance - optimizedDistance) / originalDistance) * 100);
+  const minutesSaved = Math.round(((originalDistance - optimizedDistance) / AVG_HGV_MPH) * 60);
 
   const runOptimization = () => {
     setIsOptimizing(true);
@@ -50,15 +118,13 @@ export default function AIRouteDemo() {
     setProgress(0);
     setOptimizedOrder([]);
 
-    // Simulate AI optimization with progress
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
           setIsOptimizing(false);
           setIsOptimized(true);
-          // Simulated optimized order
-          setOptimizedOrder([1, 4, 5, 11, 6, 10, 7, 8, 9, 3, 12, 2]);
+          setOptimizedOrder(optimisedRoute.map((d) => d.id));
           return 100;
         }
         return prev + 5;
@@ -84,7 +150,7 @@ export default function AIRouteDemo() {
           </div>
           <h2 className="text-4xl font-bold mb-4">Route Sequencing AI</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Watch our AI optimize 12 UK delivery drops in real-time, reducing miles and saving hours.
+            Watch MOViDO sequence an 8-drop multi-stop route out of Northampton — distances are calculated from the real drop locations.
           </p>
         </div>
 
@@ -96,7 +162,7 @@ export default function AIRouteDemo() {
                 <MapPin className="w-4 h-4 text-primary" />
                 Delivery Drops ({sampleDrops.length})
               </h3>
-              <span className="text-xs text-muted-foreground font-mono">UK NATIONWIDE</span>
+              <span className="text-xs text-muted-foreground font-mono">START: NORTHAMPTON</span>
             </div>
             
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
@@ -169,10 +235,9 @@ export default function AIRouteDemo() {
                     />
                   </div>
                   <div className="mt-4 space-y-2 text-xs text-muted-foreground font-mono">
-                    {progress > 20 && <p className="animate-pulse">→ Calculating distances...</p>}
-                    {progress > 40 && <p className="animate-pulse">→ Applying vehicle constraints...</p>}
-                    {progress > 60 && <p className="animate-pulse">→ Checking low bridge restrictions...</p>}
-                    {progress > 80 && <p className="animate-pulse">→ Optimizing sequence...</p>}
+                    {progress > 20 && <p className="animate-pulse">→ Calculating distances between drops...</p>}
+                    {progress > 50 && <p className="animate-pulse">→ Building nearest-neighbour sequence...</p>}
+                    {progress > 80 && <p className="animate-pulse">→ Refining with 2-opt swaps...</p>}
                   </div>
                 </div>
               )}
@@ -243,7 +308,8 @@ export default function AIRouteDemo() {
                     <div>
                       <p className="text-2xl font-bold text-green-500">{savings}% Reduction</p>
                       <p className="text-sm text-muted-foreground">
-                        Save {originalDistance - optimizedDistance} miles and ~4 hours per route
+                        Save {originalDistance - optimizedDistance} miles and ~{minutesSaved} minutes on this route
+                        (estimated at {AVG_HGV_MPH} mph average)
                       </p>
                     </div>
                   </div>

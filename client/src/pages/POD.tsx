@@ -49,6 +49,7 @@ export default function POD() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [podNotes, setPodNotes] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [photoViewUrl, setPhotoViewUrl] = useState<string | null>(null);
 
   // Signature canvas
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -154,27 +155,18 @@ export default function POD() {
       let signatureData: string | null = null;
 
       if (captureMode === "photo" && photoFile) {
-        // Upload to Supabase Storage
-        const ext = photoFile.name.split(".").pop() || "jpg";
-        const path = `pod/${selectedJob.reference}-${Date.now()}.${ext}`;
+        // Private bucket: objects live under "<organization_id>/<job_id>/" and
+        // storage policies only let the job's own organisation read them. The
+        // job row stores the object path; views use short-lived signed URLs.
+        if (!selectedJob.organization_id) throw new Error("Job has no organisation");
+        const ext = (photoFile.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${selectedJob.organization_id}/${selectedJob.id}/${Date.now()}.${ext}`;
 
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from("pod-photos")
           .upload(path, photoFile, { contentType: photoFile.type });
-
-        if (error) {
-          // If bucket doesn't exist, store as data URL fallback
-          console.warn("Storage upload failed (bucket may not exist):", error.message);
-          // Convert to base64 as fallback
-          const reader = new FileReader();
-          photoUrl = await new Promise((resolve) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(photoFile);
-          });
-        } else {
-          const { data: urlData } = supabase.storage.from("pod-photos").getPublicUrl(path);
-          photoUrl = urlData.publicUrl;
-        }
+        if (error) throw new Error(`Photo upload failed: ${error.message}`);
+        photoUrl = path;
       }
 
       if (captureMode === "signature" && canvasRef.current) {
@@ -220,7 +212,22 @@ export default function POD() {
 
   const openView = (job: Job) => {
     setSelectedJob(job);
+    setPhotoViewUrl(null);
     setShowViewModal(true);
+    const stored = job.pod_photo_url;
+    if (!stored) return;
+    // Older records hold an inline data: URL; new ones hold a storage path.
+    if (stored.startsWith("data:")) {
+      setPhotoViewUrl(stored);
+      return;
+    }
+    supabase.storage
+      .from("pod-photos")
+      .createSignedUrl(stored, 300)
+      .then(({ data, error }) => {
+        if (error || !data) toast.error("Could not load the POD photo");
+        else setPhotoViewUrl(data.signedUrl);
+      });
   };
 
   return (
@@ -467,11 +474,15 @@ export default function POD() {
               {selectedJob?.pod_photo_url && (
                 <div>
                   <Label className="text-xs mb-2 block">Photo</Label>
+                  {!photoViewUrl ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  ) : (
                   <img
-                    src={selectedJob.pod_photo_url}
+                    src={photoViewUrl}
                     alt="POD Photo"
                     className="w-full rounded-lg border border-border max-h-64 object-cover"
                   />
+                  )}
                 </div>
               )}
 

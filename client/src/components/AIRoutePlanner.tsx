@@ -163,6 +163,22 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
   const [vehicleHeight, setVehicleHeight] = useState(4.95);
   const [vehicleWeight, setVehicleWeight] = useState(44);
   const [customerName, setCustomerName] = useState("");
+
+  /** Hand the optimised stop order to a navigation app (Google Maps directions). */
+  const exportToNavigation = () => {
+    if (!optimized || waypoints.length < 2) return;
+    const ordered = optimized.sequence.map((i) => waypoints[i]).filter(Boolean);
+    const coord = (w: Waypoint) => `${w.lat},${w.lng}`;
+    const params = new URLSearchParams({
+      api: "1",
+      origin: coord(ordered[0]),
+      destination: coord(ordered[ordered.length - 1]),
+      travelmode: "driving",
+    });
+    const middle = ordered.slice(1, -1).map(coord);
+    if (middle.length) params.set("waypoints", middle.join("|"));
+    window.open(`https://www.google.com/maps/dir/?${params.toString()}`, "_blank", "noopener,noreferrer");
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -259,7 +275,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
 
           routeResult = await tomtomCalculateRoute(
             ordered.map((w) => ({ lat: w.lat, lng: w.lng })),
-            { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, traffic: false }
+            { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, traffic: true }
           );
           break;
         } catch (err: any) {
@@ -641,9 +657,9 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
                     style={{ flex: 1, padding: "9px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontSize: "12.5px", cursor: "pointer", fontFamily: "inherit" }}>
                     Reset
                   </button>
-                  <button onClick={() => toast.success("Route exported to Movido Driver via TomTom")}
+                  <button onClick={exportToNavigation} title="Open the optimised sequence in Google Maps"
                     style={{ flex: 1, padding: "9px", borderRadius: "8px", background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)", color: "#a5b4fc", fontSize: "12.5px", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
-                    <Smartphone className="w-3.5 h-3.5" />Export
+                    <Smartphone className="w-3.5 h-3.5" />Open in Maps
                   </button>
                 </div>
                 <button

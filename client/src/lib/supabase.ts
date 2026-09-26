@@ -50,37 +50,6 @@ const customStorage = {
   },
 };
 
-// Manual lock timeout handler - prevents Web Locks API from blocking auth initialization
-let lockTimeout: ReturnType<typeof setTimeout> | null = null;
-const LOCK_TIMEOUT_MS = 30000; // 30 seconds - extended for robust operation
-
-/**
- * Get a lock with timeout fallback
- * If the lock operation takes too long, we proceed anyway rather than blocking
- */
-const getLockWithTimeout = (name: string): Promise<LockManager | null> => {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      console.warn(`[Supabase Lock] Lock acquisition timeout for "${name}", proceeding without lock`);
-      resolve(null);
-    }, LOCK_TIMEOUT_MS);
-
-    if (typeof navigator !== 'undefined' && navigator.locks) {
-      navigator.locks.request(name, { mode: 'exclusive', ifAvailable: true }, (lock) => {
-        clearTimeout(timeout);
-        resolve(lock || null);
-      }).catch((error) => {
-        clearTimeout(timeout);
-        console.warn(`[Supabase Lock] Lock request failed for "${name}":`, error);
-        resolve(null);
-      });
-    } else {
-      clearTimeout(timeout);
-      resolve(null);
-    }
-  });
-};
-
 /**
  * Custom auth session persister that avoids Web Locks API deadlocks
  * Falls back to direct localStorage access if locks are unavailable
@@ -150,5 +119,3 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Export lock timeout handler for use in auth hooks
-export { getLockWithTimeout, LOCK_TIMEOUT_MS };

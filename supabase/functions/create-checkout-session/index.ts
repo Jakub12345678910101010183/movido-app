@@ -1,104 +1,147 @@
-// Supabase Edge Function — Create Stripe Checkout Session
-// Deploy: supabase functions deploy create-checkout-session
-// Set secret: supabase secrets set STRIPE_SECRET_KEY=sk_live_...
+// Supabase Edge Function — Create a Stripe Checkout session for the caller's
+// organisation.
+//
+// Deploy with verify_jwt = true. Identity comes from auth.getUser(<token>),
+// authority from public.users: only an organisation's admin can start a
+// subscription, and the subscription is always bound to that organisation
+// (client_reference_id + metadata), never to anything in the request body.
+//
+// Pricing is per vehicle, so the quantity starts at the organisation's
+// current vehicle count and the customer can adjust it at checkout.
+//
+// Secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+//          STRIPE_SECRET_KEY, STRIPE_PRICE_{STARTER,PRO}_{MONTHLY,ANNUAL}
 
 import Stripe from "https://esm.sh/stripe@14.0.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-const ALLOWED_ORIGINS = [
-  "https://www.movidologistics.uk",
-  "https://movidologistics.uk",
-];
+const SITE_URL = "https://www.movidologistics.uk";
+const ALLOWED_ORIGINS = [SITE_URL, "https://movidologistics.uk"];
 
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : ALLOWED_ORIGINS[0];
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : SITE_URL,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
 }
 
-// Allowlist of valid price IDs (prevents arbitrary price injection)
-const ALLOWED_PRICE_IDS = new Set([
-  Deno.env.get("STRIPE_PRICE_STARTER_MONTHLY"),
-  Deno.env.get("STRIPE_PRICE_STARTER_ANNUAL"),
-  Deno.env.get("STRIPE_PRICE_PRO_MONTHLY"),
-  Deno.env.get("STRIPE_PRICE_PRO_ANNUAL"),
-].filter(Boolean));
+function json(req: Request, status: number, body: Record<string, unknown>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+  });
+}
+
+function readBearerToken(req: Request): string | null {
+  const [scheme, ...rest] = (req.headers.get("Authorization") ?? "").split(" ");
+  if (scheme.toLowerCase() !== "bearer") return null;
+  const token = rest.join(" ").trim();
+  return token.length > 0 ? token : null;
+}
 
 Deno.serve(async (req: Request) => {
-  const corsH = getCorsHeaders(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
+  if (req.method !== "POST") return json(req, 405, { error: "METHOD_NOT_ALLOWED" });
 
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsH });
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  const allowedPrices = new Set(
+    ["STRIPE_PRICE_STARTER_MONTHLY", "STRIPE_PRICE_STARTER_ANNUAL",
+     "STRIPE_PRICE_PRO_MONTHLY", "STRIPE_PRICE_PRO_ANNUAL"]
+      .map((name) => Deno.env.get(name))
+      .filter((v): v is string => Boolean(v)),
+  );
+  // Without an allowlist any price id would be accepted, so refuse instead.
+  if (!stripeKey || allowedPrices.size === 0) {
+    console.error("billing_not_configured");
+    return json(req, 503, { error: "BILLING_NOT_CONFIGURED" });
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const token = readBearerToken(req);
+  if (!token) return json(req, 401, { error: "UNAUTHENTICATED" });
+  const caller = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: userData, error: userErr } = await caller.auth.getUser(token);
+  if (userErr || !userData?.user) return json(req, 401, { error: "UNAUTHENTICATED" });
+  const user = userData.user;
+
+  let priceId: unknown;
   try {
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) {
-      return new Response(
-        JSON.stringify({ error: "Stripe secret key not configured" }),
-        { status: 500, headers: { ...corsH, "Content-Type": "application/json" } }
-      );
+    ({ priceId } = await req.json());
+  } catch {
+    return json(req, 400, { error: "INVALID_BODY" });
+  }
+  if (typeof priceId !== "string" || !allowedPrices.has(priceId)) {
+    return json(req, 400, { error: "INVALID_PRICE" });
+  }
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: profile } = await admin
+    .from("users")
+    .select("role, organization_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!profile?.organization_id || profile.role !== "admin") {
+    return json(req, 403, { error: "ADMIN_ONLY" });
+  }
+  const orgId: string = profile.organization_id;
+
+  const { data: org } = await admin
+    .from("organizations")
+    .select("id, name, email, stripe_customer_id")
+    .eq("id", orgId)
+    .single();
+  if (!org) return json(req, 404, { error: "ORGANIZATION_NOT_FOUND" });
+
+  const { count: vehicleCount } = await admin
+    .from("vehicles")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId);
+
+  const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+  try {
+    let customerId: string | null = org.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        name: org.name,
+        email: org.email ?? user.email ?? undefined,
+        metadata: { organization_id: orgId },
+      });
+      customerId = customer.id;
+      await admin.from("organizations").update({ stripe_customer_id: customerId }).eq("id", orgId);
     }
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const { priceId, successUrl, cancelUrl, customerEmail } = await req.json();
-
-    if (!priceId) {
-      return new Response(
-        JSON.stringify({ error: "priceId is required" }),
-        { status: 400, headers: { ...corsH, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate priceId is in our allowlist to prevent price injection attacks
-    if (ALLOWED_PRICE_IDS.size > 0 && !ALLOWED_PRICE_IDS.has(priceId)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid price ID" }),
-        { status: 400, headers: { ...corsH, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate successUrl/cancelUrl to prevent open redirect attacks
-    const validUrls = ["https://www.movidologistics.uk", "https://movidologistics.uk"];
-    const safeSuccessUrl = successUrl && validUrls.some((u) => successUrl.startsWith(u))
-      ? successUrl
-      : "https://www.movidologistics.uk/dashboard?checkout=success";
-    const safeCancelUrl = cancelUrl && validUrls.some((u) => cancelUrl.startsWith(u))
-      ? cancelUrl
-      : "https://www.movidologistics.uk/pricing?checkout=cancelled";
-
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: safeSuccessUrl,
-      cancel_url: safeCancelUrl,
+      customer: customerId,
+      client_reference_id: orgId,
+      metadata: { organization_id: orgId },
+      subscription_data: { metadata: { organization_id: orgId } },
+      line_items: [{
+        price: priceId,
+        quantity: Math.max(1, vehicleCount ?? 0),
+        adjustable_quantity: { enabled: true, minimum: 1, maximum: 500 },
+      }],
+      success_url: `${SITE_URL}/settings?checkout=success`,
+      cancel_url: `${SITE_URL}/pricing?checkout=cancelled`,
       allow_promotion_codes: true,
       billing_address_collection: "required",
       tax_id_collection: { enabled: true },
-    };
-
-    // Pre-fill email if provided
-    if (customerEmail) {
-      sessionParams.customer_email = customerEmail;
-    }
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
-
-    return new Response(
-      JSON.stringify({ url: session.url, sessionId: session.id }),
-      { headers: { ...corsH, "Content-Type": "application/json" } }
-    );
-  } catch (err: any) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsH, "Content-Type": "application/json" } }
-    );
+      customer_update: { name: "auto", address: "auto" },
+    });
+    return json(req, 200, { url: session.url });
+  } catch (err) {
+    console.error("checkout_failed", err instanceof Error ? err.message : "unknown");
+    return json(req, 502, { error: "CHECKOUT_FAILED" });
   }
 });

@@ -7,7 +7,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type {
-  Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog,
+  Database,
+  Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog, Message,
   InsertVehicle, InsertDriver, InsertJob,
 } from "@/lib/database.types";
 
@@ -15,8 +16,10 @@ import type {
 // Generic realtime hook
 // ============================================
 
+type TableName = keyof Database["public"]["Tables"];
+
 function useRealtimeTable<T extends { id: number | string }>(
-  table: string,
+  table: TableName,
   orderBy: string = "created_at"
 ) {
   const [data, setData] = useState<T[]>([]);
@@ -25,13 +28,18 @@ function useRealtimeTable<T extends { id: number | string }>(
 
   const fetch = useCallback(async () => {
     try {
-      const { data: rows, error: err } = await supabase
-        .from(table)
-        .select("*")
-        .order(orderBy, { ascending: false });
+      const load = () => supabase.from(table).select("*").order(orderBy, { ascending: false })
+        .abortSignal(AbortSignal.timeout(15000));
+      let { data: rows, error: err } = await load();
+      // Retry transient network failures before showing an empty list.
+      for (let attempt = 1; err && attempt <= 2; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+        ({ data: rows, error: err } = await load());
+      }
 
       if (err) throw err;
-      setData((rows || []) as T[]);
+      // Row type is fixed by the caller's choice of table name.
+      setData((rows ?? []) as unknown as T[]);
       setError(null);
     } catch (err: any) {
       console.error(`[${table}] Fetch error:`, err);
@@ -244,12 +252,19 @@ export function useJobs() {
   }, []);
 
   const generateReference = useCallback(async () => {
-    const year = new Date().getFullYear();
-    const { count } = await supabase
+    // Next number after the highest reference this organisation already used
+    // this year (RLS scopes the query to the caller's own jobs). Counting rows
+    // would reuse numbers after a deletion.
+    const prefix = `JOB-${new Date().getFullYear()}-`;
+    const { data: rows } = await supabase
       .from("jobs")
-      .select("*", { count: "exact", head: true });
-    const nextNum = (count || 0) + 1;
-    return `JOB-${year}-${String(nextNum).padStart(3, "0")}`;
+      .select("reference")
+      .like("reference", `${prefix}%`);
+    const highest = (rows ?? []).reduce((max, row) => {
+      const n = Number.parseInt(row.reference.slice(prefix.length), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    return `${prefix}${String(highest + 1).padStart(3, "0")}`;
   }, []);
 
   return { jobs: data, isLoading, error, refetch, create, update, remove, generateReference };
@@ -326,7 +341,7 @@ export function useMessages(currentUserId: string | undefined) {
   const send = useCallback(async (data: {
     recipient_id: string | null;
     content: string;
-    channel?: string;
+    channel?: Message["channel"];
   }) => {
     if (!currentUserId) throw new Error("Not authenticated");
     const { error } = await supabase.from("messages").insert({

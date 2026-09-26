@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Link, useLocation } from "wouter"
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { 
   Check, 
@@ -119,35 +120,35 @@ export default function Pricing() {
 
     const priceId = isAnnual ? plan.stripePriceAnnual : plan.stripePriceMonthly;
     if (!priceId) {
-        setLocation('/register?plan=' + plan.name.toLowerCase());
-        return;
-      }
+      toast.error("Online checkout is not available for this plan yet — please contact sales.");
+      return;
+    }
 
     setLoadingPlan(plan.name);
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const res = await fetch(
-        `${supabaseUrl}/functions/v1/create-checkout-session`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            priceId,
-            successUrl: `${window.location.origin}/dashboard?checkout=success`,
-            cancelUrl: `${window.location.origin}/pricing?checkout=cancelled`,
-            customerEmail: session.user.email,
-          }),
-        }
+      // The function binds the subscription to the caller's organisation and
+      // fixes the success/cancel URLs server-side.
+      const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>(
+        "create-checkout-session",
+        { body: { priceId } },
       );
-      const data = await res.json();
-      if (data?.url) window.location.href = data.url;
-      else throw new Error(data?.error || "No checkout URL returned");
-    } catch (err: any) {
-      alert("Checkout failed: " + err.message);
+      if (error || !data?.url) {
+        let code = data?.error;
+        const context = (error as { context?: Response } | null)?.context;
+        if (!code && context && typeof context.json === "function") {
+          code = await context.json().then((b: { error?: string }) => b.error).catch(() => undefined);
+        }
+        toast.error(
+          code === "ADMIN_ONLY"
+            ? "Only your company's administrator can start a subscription."
+            : code === "BILLING_NOT_CONFIGURED"
+              ? "Online checkout is temporarily unavailable — please contact sales."
+              : "Checkout could not be started. Please try again.",
+        );
+        return;
+      }
+      window.location.href = data.url;
     } finally {
       setLoadingPlan(null);
     }

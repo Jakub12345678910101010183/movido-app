@@ -34,7 +34,7 @@ import { useLocation } from "wouter";
 export default function Settings() {
   const { user, profile, signOut } = useAuthContext();
   const [, setLocation] = useLocation();
-  const [profileName, setProfileName] = useState(profile?.full_name || "");
+  const [profileName, setProfileName] = useState(profile?.name || "");
   const [profileSaving, setProfileSaving] = useState(false);
   const [showAIPlanner, setShowAIPlanner] = useState(false);
 
@@ -72,23 +72,43 @@ export default function Settings() {
     async function loadDieselPrice() {
       const { data } = await supabase
         .from('app_settings')
-        .select('value')
-        .eq('key', 'diesel_price_per_litre')
-        .single();
-      if (data) setDieselPrice(data.value);
+        .select('value, organization_id')
+        .eq('key', 'diesel_price_per_litre');
+      if (!data || data.length === 0) return;
+      // Prefer the organisation's own value over the platform default.
+      const own = data.find((row) => row.organization_id !== null) ?? data[0];
+      setDieselPrice(own.value);
     }
     loadDieselPrice();
   }, []);
 
   const saveDieselPrice = async () => {
-    await supabase
+    const organizationId = profile?.organization_id;
+    const price = Number(dieselPrice);
+    if (!organizationId) {
+      toast.error('Your account is not linked to an organisation');
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error('Enter a valid diesel price');
+      return;
+    }
+    const { error } = await supabase
       .from('app_settings')
-      .upsert({
-        key: 'diesel_price_per_litre',
-        value: dieselPrice,
-        updated_at: new Date().toISOString()
-      });
-    toast(`Diesel price updated to £${dieselPrice}/L`);
+      .upsert(
+        {
+          organization_id: organizationId,
+          key: 'diesel_price_per_litre',
+          value: String(price),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'organization_id,key' },
+      );
+    if (error) {
+      toast.error(`Could not save diesel price: ${error.message}`);
+      return;
+    }
+    toast.success(`Diesel price updated to £${price.toFixed(2)}/L`);
   };
 
   return (
@@ -142,11 +162,13 @@ export default function Settings() {
                 onClick={async () => {
                   if (!user) return;
                   setProfileSaving(true);
-                  try {
-                    await supabase.from("users").update({ full_name: profileName }).eq("id", user.id);
-                    toast.success("Profile updated");
-                  } catch { toast.error("Failed to update"); }
-                  finally { setProfileSaving(false); }
+                  const { error } = await supabase
+                    .from("users")
+                    .update({ name: profileName.trim() || null })
+                    .eq("id", user.id);
+                  setProfileSaving(false);
+                  if (error) toast.error(`Failed to update profile: ${error.message}`);
+                  else toast.success("Profile updated");
                 }}
               >
                 {profileSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -178,24 +200,7 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Company Name</Label>
-                <Input className="mt-1.5 bg-muted/30" defaultValue="Movido Logistics Ltd" />
-              </div>
-              <div>
-                <Label>Contact Email</Label>
-                <Input className="mt-1.5 bg-muted/30" defaultValue="dispatch@movido.com" />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input className="mt-1.5 bg-muted/30" defaultValue="+44 800 123 4567" />
-              </div>
-              <div>
-                <Label>Address</Label>
-                <Input className="mt-1.5 bg-muted/30" defaultValue="Northampton, United Kingdom" />
-              </div>
-            </div>
+            <CompanyDetails canEdit={profile?.role === "admin"} />
           </section>
 
           {/* Units & Localization */}
@@ -448,5 +453,109 @@ export default function Settings() {
         <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} onSaveJob={() => {}} />
       </div>
     </DashboardLayout>
+  );
+}
+
+type CompanyForm = { name: string; email: string; phone: string; address: string };
+
+function CompanyDetails({ canEdit }: { canEdit: boolean }) {
+  const [form, setForm] = useState<CompanyForm | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("id, name, email, phone, address, plan, plan_status, trial_ends_at")
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data) {
+        setLoadError(true);
+        return;
+      }
+      setOrgId(data.id);
+      setPlan(
+        `${data.plan} · ${data.plan_status}` +
+          (data.plan_status === "trial" && data.trial_ends_at
+            ? ` (ends ${new Date(data.trial_ends_at).toLocaleDateString("en-GB")})`
+            : ""),
+      );
+      setForm({
+        name: data.name ?? "",
+        email: data.email ?? "",
+        phone: data.phone ?? "",
+        address: data.address ?? "",
+      });
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loadError) {
+    return <p className="text-sm text-muted-foreground">Company details could not be loaded.</p>;
+  }
+  if (!form) {
+    return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />;
+  }
+
+  const set = (key: keyof CompanyForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [key]: e.target.value });
+
+  const save = async () => {
+    if (!orgId) return;
+    if (form.name.trim().length < 2) {
+      toast.error("Company name is required");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("organizations")
+      .update({
+        name: form.name.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        address: form.address.trim() || null,
+      })
+      .eq("id", orgId);
+    setSaving(false);
+    if (error) toast.error(`Could not save company details: ${error.message}`);
+    else toast.success("Company details saved");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="org-name">Company Name</Label>
+          <Input id="org-name" className="mt-1.5 bg-muted/30" value={form.name} onChange={set("name")} disabled={!canEdit} />
+        </div>
+        <div>
+          <Label htmlFor="org-email">Contact Email</Label>
+          <Input id="org-email" type="email" className="mt-1.5 bg-muted/30" value={form.email} onChange={set("email")} disabled={!canEdit} />
+        </div>
+        <div>
+          <Label htmlFor="org-phone">Phone</Label>
+          <Input id="org-phone" className="mt-1.5 bg-muted/30" value={form.phone} onChange={set("phone")} disabled={!canEdit} />
+        </div>
+        <div>
+          <Label htmlFor="org-address">Address</Label>
+          <Input id="org-address" className="mt-1.5 bg-muted/30" value={form.address} onChange={set("address")} disabled={!canEdit} />
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-muted-foreground capitalize">Plan: {plan}</p>
+        {canEdit && (
+          <Button variant="outline" size="sm" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save Company
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

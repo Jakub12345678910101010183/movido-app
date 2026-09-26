@@ -87,7 +87,7 @@ export function useGeofencing(config: Partial<GeofenceConfig> = {}) {
 
       if (!jobRows || jobRows.length === 0) return;
 
-      const jobs: JobGeofence[] = jobRows as JobGeofence[];
+      const jobs: JobGeofence[] = jobRows.map(({ id, ...rest }) => ({ job_id: id, ...rest }));
 
       // 3. Check each driver against their assigned jobs
       for (const driver of drivers) {

@@ -7,6 +7,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useAuth, type ProfileStatus } from "@/hooks/useAuth";
 import NoDispatchAccess from "@/pages/NoDispatchAccess";
+import { Redirect } from "wouter";
 import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import type { User as AppUser } from "@/lib/database.types";
 
@@ -112,6 +113,10 @@ export function RequireAuth({
   }
 
   const role = normalizeRole(profile?.role);
+  if (role === "driver" && !allow.includes(role)) {
+    // Drivers have their own workspace; send them there instead of a dead end.
+    return <Redirect to="/driver" />;
+  }
   if (!role || !allow.includes(role)) {
     return <NoDispatchAccess role={role} />;
   }

@@ -55,13 +55,8 @@ interface DriverWTD {
   activeJobRef: string | null;
 }
 
-// Deterministic seed-based offset so values look realistic per driver
-function seedOffset(id: number, seed: number): number {
-  return ((id * 7 + seed * 13) % 100) / 100;
-}
-
 export default function WTD() {
-  const { drivers, isLoading: driversLoading } = useDrivers();
+  const { drivers, isLoading: driversLoading, refetch: refetchDrivers } = useDrivers();
   const { jobs, isLoading: jobsLoading } = useJobs();
   const [selectedDriver, setSelectedDriver] = useState<number | null>(null);
   const [weekFilter, setWeekFilter] = useState<"current" | "last">("current");
@@ -70,69 +65,18 @@ export default function WTD() {
 
   // ─── Compute WTD data from jobs ───────────────────────────────
   const wtdData: DriverWTD[] = useMemo(() => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
-    startOfWeek.setHours(0, 0, 0, 0);
-    const startOfFortnight = new Date(startOfWeek);
-    startOfFortnight.setDate(startOfFortnight.getDate() - 7);
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-
     return drivers.map((driver) => {
       const driverJobs = jobs.filter((j) => j.driver_id === driver.id);
 
-      // Today's jobs (completed or in progress)
-      const todayJobs = driverJobs.filter((j) => {
-        const created = new Date(j.created_at);
-        return created >= startOfDay && (j.status === "completed" || j.status === "in_progress");
-      });
-
-      // Week's jobs
-      const weekJobs = driverJobs.filter((j) => {
-        const created = new Date(j.created_at);
-        return created >= startOfWeek && (j.status === "completed" || j.status === "in_progress");
-      });
-
-      // Fortnight jobs
-      const fortJobs = driverJobs.filter((j) => {
-        const created = new Date(j.created_at);
-        return created >= startOfFortnight && (j.status === "completed" || j.status === "in_progress");
-      });
-
-      // Estimate hours: each completed job ≈ 2-5h, in_progress ≈ ongoing
-      // Use seed-based realistic values when no actual session data exists
-      const base = seedOffset(driver.id, 1);
-      const todayDriveHours = Math.min(
-        todayJobs.length > 0
-          ? todayJobs.length * (2 + base * 2.5)
-          : (driver.status === "on_duty" ? 3 + base * 4 : 0),
-        12
-      );
-      const weekDriveHours = Math.min(
-        weekJobs.length > 0
-          ? weekJobs.length * (2.5 + base * 2)
-          : (driver.status === "on_duty" || driver.status === "available" ? 20 + base * 25 : 0),
-        60
-      );
-      const fortnightDriveHours = Math.min(
-        fortJobs.length > 0
-          ? fortJobs.length * (2.5 + base * 1.5)
-          : weekDriveHours * (1.5 + base * 0.5),
-        95
-      );
-
-      // Continuous drive: if on_duty, simulate based on day progress
-      const hourOfDay = now.getHours() + now.getMinutes() / 60;
-      const continuousDriveHours = driver.status === "on_duty"
-        ? Math.min((hourOfDay - 8 + base * 2) % 5, 4.5 + base)
-        : 0;
-
-      const lastBreakTime = driver.status === "on_duty"
-        ? new Date(now.getTime() - continuousDriveHours * 3600 * 1000).toISOString()
-        : null;
-
-      const extendedDaysUsed = Math.floor(base * 2);
+      // Only recorded values are used. hours_today / hours_week are the
+      // driver record's figures; MOViDO has no tachograph feed, so continuous
+      // driving, breaks and extended days are not known and are not invented.
+      const todayDriveHours = Number(driver.hours_today ?? 0);
+      const weekDriveHours = Number(driver.hours_week ?? 0);
+      const fortnightDriveHours = weekDriveHours; // previous week not recorded
+      const continuousDriveHours = 0;
+      const lastBreakTime: string | null = null;
+      const extendedDaysUsed = 0;
       const remainingDailyHours = Math.max(0, WTD_LIMITS.DAILY_MAX_DRIVE - todayDriveHours);
       const remainingWeeklyHours = Math.max(0, WTD_LIMITS.WEEKLY_MAX - weekDriveHours);
       const remainingContinuous = Math.max(0, WTD_LIMITS.BREAK_AFTER - continuousDriveHours);
@@ -145,7 +89,7 @@ export default function WTD() {
       const warnings: string[] = [];
       let complianceStatus: ComplianceStatus = "compliant";
 
-      if (driver.status === "off_duty" || driver.status === "unavailable") {
+      if (driver.status === "off_duty") {
         complianceStatus = "resting";
       } else {
         // Violations
@@ -237,13 +181,18 @@ export default function WTD() {
             <p className="text-sm text-muted-foreground mt-1">
               EU Working Time Directive — HGV driving hours monitoring
             </p>
+            <p className="text-xs text-amber-400/90 mt-2 max-w-2xl">
+              Operational view based on the hours recorded on each driver&apos;s profile. MOViDO does not read
+              tachograph data, so continuous driving and breaks are not tracked here — this is not a legal
+              compliance record.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/30 border border-white/10 rounded-lg px-3 py-2">
               <Info className="w-3 h-3" />
               <span>EU Reg 561/2006 + AETR</span>
             </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => toast.info("Refreshing WTD data...")}>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => { void refetchDrivers(); toast.success("Driver hours refreshed"); }}>
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
             </Button>
