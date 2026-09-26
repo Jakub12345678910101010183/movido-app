@@ -157,7 +157,7 @@ export default function Incidents() {
         />
 
         {/* Stats */}
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="card-terminal p-4">
             <p className="text-xs text-muted-foreground mb-1">Total</p>
             <p className="text-2xl font-mono font-bold text-cyan">{stats.total}</p>
@@ -181,8 +181,8 @@ export default function Incidents() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search driver, description, location..."
@@ -339,6 +339,7 @@ export default function Incidents() {
                             variant="outline"
                             size="icon"
                             className="text-red-500 hover:text-red-400 hover:border-red-500/50"
+                            aria-label="Delete incident"
                             onClick={() => { setDeletingId(inc.id); setShowDeleteModal(true); }}
                           >
                             <Trash2 className="w-4 h-4" />

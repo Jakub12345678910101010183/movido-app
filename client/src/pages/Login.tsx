@@ -17,7 +17,8 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const redirectTo = new URLSearchParams(search).get("redirect") || "/dashboard";
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">(() =>
+    new URLSearchParams(window.location.search).get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -130,17 +131,17 @@ export default function Login() {
           </h1>
 
           <p className="text-muted-foreground text-lg leading-relaxed">
-            Professional fleet management with real-time tracking, AI route
-            optimisation, and HGV-specific navigation. Built for dispatchers
-            who demand precision.
+            Plan jobs, dispatch drivers, follow them live on the map and
+            collect proof of delivery — for your office and your drivers'
+            phones.
           </p>
 
           <div className="grid grid-cols-2 gap-4 pt-4">
             {[
-              { value: "99.9%", label: "Uptime" },
-              { value: "< 2s", label: "Location Update" },
-              { value: "15%", label: "Fuel Savings" },
-              { value: "24/7", label: "Support" },
+              { value: "14 days", label: "Free trial" },
+              { value: "~15 s", label: "Driver position updates" },
+              { value: "Photo + signature", label: "Proof of delivery" },
+              { value: "0", label: "Apps to install" },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -200,7 +201,7 @@ export default function Login() {
                 <Input
                   id="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -214,7 +215,7 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
-                placeholder="dispatcher@movido.co.uk"
+                placeholder="you@company.co.uk"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -289,8 +290,7 @@ export default function Login() {
                 : "Don't have an account? Sign up"}
             </button>
 
-            {/* Always offered, whether or not the password is remembered. */}
-            {mode === "forgot" ? (
+            {mode === "forgot" && (
               <button
                 type="button"
                 className="block w-full text-sm text-muted-foreground hover:text-primary transition-colors"
@@ -300,18 +300,6 @@ export default function Login() {
                 }}
               >
                 Back to Sign In
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="block w-full text-sm text-primary hover:underline"
-                onClick={() => {
-                  setMode("forgot");
-                  setError("");
-                  setPassword("");
-                }}
-              >
-                Forgot password? Odzyskaj konto
               </button>
             )}
           </div>

@@ -244,7 +244,7 @@ export default function POD() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4">
             <div className="flex items-center gap-2 mb-1"><Package className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Total Jobs</span></div>
             <p className="text-2xl font-mono font-bold text-cyan">{stats.total}</p>
@@ -264,8 +264,8 @@ export default function POD() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search reference, customer, address..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
@@ -279,7 +279,7 @@ export default function POD() {
               <SelectItem value="na">N/A</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
         </div>
 
         {/* Loading */}

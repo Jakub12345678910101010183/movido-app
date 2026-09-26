@@ -11,7 +11,7 @@ import { useState } from "react";
 const navLinks = [
   { href: "/#features", label: "Features" },
   { href: "/#how-it-works", label: "How it Works" },
-  { href: "/#driver-app", label: "Driver App" },
+  { href: "/#driver-app", label: "For drivers" },
   { href: "/pricing", label: "Pricing" },
 ];
 
@@ -48,21 +48,23 @@ export default function Navbar() {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm">
+                <Link href="/login">
                 Sign In
+                </Link>
               </Button>
-            </Link>
-            <Link href="/pricing">
-              <Button size="sm" className="glow-cyan-sm">
-                Get Started
+            <Button asChild size="sm" className="glow-cyan-sm">
+                <Link href="/login?mode=register">
+                Start free trial
+                </Link>
               </Button>
-            </Link>
           </div>
 
           {/* Mobile Menu Button */}
           <button
             className="md:hidden p-2"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
@@ -88,16 +90,16 @@ export default function Navbar() {
                 </a>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border">
-                <Link href="/dashboard">
-                  <Button variant="ghost" size="sm" className="w-full justify-start">
+                <Button asChild variant="ghost" size="sm" className="w-full justify-start">
+                    <Link href="/login">
                     Sign In
+                    </Link>
                   </Button>
-                </Link>
-                <Link href="/pricing">
-                  <Button size="sm" className="w-full">
-                    Get Started
+                <Button asChild size="sm" className="w-full">
+                    <Link href="/login?mode=register">
+                    Start free trial
+                    </Link>
                   </Button>
-                </Link>
               </div>
             </div>
           </div>

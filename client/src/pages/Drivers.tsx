@@ -371,13 +371,13 @@ export default function Drivers() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by name, email, phone..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by name, email, phone..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-muted/30"><Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="on_duty">On Duty</SelectItem><SelectItem value="available">Available</SelectItem><SelectItem value="off_duty">Off Duty</SelectItem><SelectItem value="on_break">On Break</SelectItem></SelectContent></Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Drivers</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">On Duty</p><p className="text-2xl font-mono font-bold text-green-500">{drivers.filter(d => d.status === "on_duty").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Available</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.filter(d => d.status === "available").length}</p></div>
@@ -446,7 +446,7 @@ export default function Drivers() {
                         <Bell className="w-4 h-4" />
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => openEdit(driver)}><Edit className="w-3 h-3 mr-1" />Edit</Button>
-                      <Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" onClick={() => { setSelectedDriverId(driver.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button>
+                      <Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" aria-label={`Delete ${driver.name}`} onClick={() => { setSelectedDriverId(driver.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button>
                     </div></td>
                   </tr>
                 ))}

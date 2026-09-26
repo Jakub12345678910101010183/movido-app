@@ -616,7 +616,7 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
                   letterSpacing: "-0.2px",
                 }}
               >
-                Movido AI Planner
+                Dispatch Assistant
               </div>
               <div
                 style={{
@@ -1101,7 +1101,7 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
                   handleSend();
                 }
               }}
-              placeholder="Ask the AI Planner..."
+              placeholder="e.g. assign JOB-2026-001 to Sam"
               rows={1}
               style={{
                 flex: 1,

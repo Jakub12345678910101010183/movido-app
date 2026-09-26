@@ -172,15 +172,15 @@ export default function Fleet() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by ID, make, registration..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 basis-full sm:basis-auto min-w-0 sm:min-w-[220px] max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search by ID, make, registration..." className="pl-9 bg-muted/30" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-muted/30"><Filter className="w-4 h-4 mr-2" /><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Status</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="idle">Idle</SelectItem><SelectItem value="maintenance">Maintenance</SelectItem><SelectItem value="offline">Offline</SelectItem></SelectContent></Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-40 bg-muted/30"><SelectValue placeholder="Type" /></SelectTrigger><SelectContent><SelectItem value="all">All Types</SelectItem><SelectItem value="hgv">HGV</SelectItem><SelectItem value="lgv">LGV</SelectItem><SelectItem value="van">Van</SelectItem></SelectContent></Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Vehicles</p><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Active</p><p className="text-2xl font-mono font-bold text-green-500">{vehicles.filter(v => v.status === "active").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">In Maintenance</p><p className="text-2xl font-mono font-bold text-blue-500">{vehicles.filter(v => v.status === "maintenance").length}</p></div>
@@ -217,7 +217,7 @@ export default function Fleet() {
                 </div>
                 <div className="flex items-center gap-2 pt-3 border-t border-border">
                   <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditModal(vehicle)}><Edit className="w-3 h-3 mr-1" />Edit</Button>
-                  <Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" onClick={() => openDeleteModal(vehicle)}><Trash2 className="w-4 h-4" /></Button>
+                  <Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" aria-label={`Delete ${vehicle.vehicle_id}`} onClick={() => openDeleteModal(vehicle)}><Trash2 className="w-4 h-4" /></Button>
                 </div>
               </div>
             ))}

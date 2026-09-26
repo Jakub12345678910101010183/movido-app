@@ -6,7 +6,7 @@
  * - Postcode/address search with TomTom geocoding
  * - Interactive TomTom map with markers
  * - TSP optimization with TomTom HGV routing
- * - HGV safety alerts (low bridges, CAZ zones)
+ * - Truck routing with vehicle height/weight (TomTom) and Clean Air Zone notices
  * - Route drawing on map
  * - Save to Jobs (Supabase)
  * - Drag & drop waypoint reordering
@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { TomTomMap, tomtomGeocode, tomtomCalculateRoute, type MapMarker, type MapRoute } from "@/components/TomTomMap";
 import { escapeHtml } from "@/lib/html";
+import { CLEAN_AIR_ZONES } from "@/lib/cleanAirZones";
 import { useJobs } from "@/hooks/useSupabaseData";
 
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -42,7 +43,7 @@ interface Waypoint {
 }
 
 interface RouteAlert {
-  type: "low_bridge" | "caz_zone";
+  type: "caz_zone";
   severity: "warning" | "critical";
   location: string;
   details: string;
@@ -66,28 +67,8 @@ interface AIRoutePlannerProps {
   onSaveJob?: () => void;
 }
 
-// ============================================
-// UK Low Bridges & CAZ databases
-// ============================================
-
-const UK_LOW_BRIDGES = [
-  { lat: 51.5155, lng: -0.1419, height: 4.2, name: "Marylebone Underpass" },
-  { lat: 52.4797, lng: -1.9026, height: 3.8, name: "Birmingham Rail Bridge" },
-  { lat: 53.4723, lng: -2.2389, height: 4.0, name: "Manchester Canal Bridge" },
-  { lat: 51.4545, lng: -0.0983, height: 3.9, name: "London Bridge Underpass" },
-  { lat: 52.9548, lng: -1.1581, height: 4.1, name: "Nottingham Rail Bridge" },
-  { lat: 53.8008, lng: -1.5491, height: 3.7, name: "Leeds Canal Bridge" },
-  { lat: 52.2405, lng: -0.9027, height: 3.6, name: "Northampton Rail Bridge" },
-  { lat: 51.7520, lng: -1.2577, height: 4.0, name: "Oxford Station Bridge" },
-];
-
-const UK_CAZ_ZONES = [
-  { lat: 51.5074, lng: -0.1278, radius: 8000, name: "London ULEZ", charge: 12.5 },
-  { lat: 52.4862, lng: -1.8904, radius: 3000, name: "Birmingham CAZ", charge: 8.0 },
-  { lat: 53.4808, lng: -2.2426, radius: 2500, name: "Manchester CAZ", charge: 7.5 },
-  { lat: 51.4545, lng: -2.5879, radius: 2000, name: "Bristol CAZ", charge: 9.0 },
-  { lat: 53.3811, lng: -1.4701, radius: 2000, name: "Sheffield CAZ", charge: 8.0 },
-];
+// Low bridges and weight limits are handled by TomTom truck routing, which
+// receives the vehicle height and weight.
 
 // Haversine distance in metres
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -98,26 +79,16 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function checkRouteAlerts(waypoints: Waypoint[], vehicleHeight: number): RouteAlert[] {
+function checkRouteAlerts(waypoints: Waypoint[]): RouteAlert[] {
   const alerts: RouteAlert[] = [];
-  const PROXIMITY_THRESHOLD = 2000; // 2km
 
   for (const wp of waypoints) {
-    for (const bridge of UK_LOW_BRIDGES) {
-      const dist = haversine(wp.lat, wp.lng, bridge.lat, bridge.lng);
-      if (dist < PROXIMITY_THRESHOLD && bridge.height < vehicleHeight) {
-        alerts.push({
-          type: "low_bridge", severity: "critical", lat: bridge.lat, lng: bridge.lng,
-          location: bridge.name, details: `Height ${bridge.height}m — your vehicle is ${vehicleHeight}m`,
-        });
-      }
-    }
-    for (const caz of UK_CAZ_ZONES) {
+    for (const caz of CLEAN_AIR_ZONES) {
       const dist = haversine(wp.lat, wp.lng, caz.lat, caz.lng);
       if (dist < caz.radius) {
         alerts.push({
           type: "caz_zone", severity: "warning", lat: caz.lat, lng: caz.lng,
-          location: caz.name, details: `Charge: £${caz.charge}/day for HGV`,
+          location: caz.name, details: "Stop is inside or near a charging zone — check your vehicle's status on GOV.UK",
         });
       }
     }
@@ -205,7 +176,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
       optimized.alerts.forEach((a, i) => {
         markers.push({
           id: `alert-${i}`, lat: a.lat, lng: a.lng,
-          type: a.type === "low_bridge" ? "bridge" : "caz",
+          type: "caz",
           popup: `<strong>⚠ ${escapeHtml(a.location)}</strong><br/>${escapeHtml(a.details)}`,
         });
       });
@@ -295,7 +266,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
       }
 
       // 4) Check for HGV alerts
-      const alerts = checkRouteAlerts(ordered, vehicleHeight);
+      const alerts = checkRouteAlerts(ordered);
 
       if (routeResult) {
         const distanceSaved = Math.max(0, straightDist - routeResult.distance);
@@ -436,7 +407,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
               <Brain className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>AI Route Planner</div>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Route Planner</div>
               <div style={{ fontSize: "11.5px", color: "rgba(6,182,212,0.8)", marginTop: "1px" }}>
                 TomTom HGV · AI optimisation · Live map
               </div>
@@ -704,7 +675,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
           }}>
             <span>Dispatch</span>
             <ChevronRight style={{ width: 12, height: 12, opacity: 0.4 }} />
-            <span style={{ color: "#22d3ee" }}>AI Route Planner</span>
+            <span style={{ color: "#22d3ee" }}>Route Planner</span>
           </div>
 
           {/* Legend top-right */}
@@ -725,11 +696,8 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
                 {l.label}
               </div>
             ))}
-            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "5px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
-              <AlertTriangle style={{ width: 11, height: 11, color: "#ef4444", flexShrink: 0 }} />Low Bridge
-            </div>
             <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
-              <AlertTriangle style={{ width: 11, height: 11, color: "#f59e0b", flexShrink: 0 }} />CAZ Zone
+              <AlertTriangle style={{ width: 11, height: 11, color: "#f59e0b", flexShrink: 0 }} />Clean Air Zone
             </div>
           </div>
 

@@ -289,7 +289,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               }}
             >
               <Sparkles className="w-3.5 h-3.5 text-white" style={{ flexShrink: 0 }} />
-              <span className="hidden sm:inline">AI Planner</span>
+              <span className="hidden sm:inline">Assistant</span>
               {aiSuggestions > 0 && (
                 <span
                   style={{
@@ -313,7 +313,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </button>
 
             {/* Bell */}
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative" aria-label={alertCount > 0 ? `Alerts (${alertCount})` : "Alerts"} onClick={() => navigate("/alerts")}>
               <Bell className="w-4 h-4" />
               {alertCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">

@@ -82,14 +82,14 @@ export default function Routes() {
     <DashboardLayout>
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div><h1 className="text-2xl font-bold">Route Management</h1><p className="text-sm text-muted-foreground mt-1">Live delivery routes from Supabase</p></div>
+          <div><h1 className="text-2xl font-bold">Route Management</h1><p className="text-sm text-muted-foreground mt-1">Delivery routes from your jobs</p></div>
           <Button className="glow-cyan-sm" onClick={() => setShowPlanner(true)}>
             <Brain className="w-4 h-4 mr-2" />Plan New Route
           </Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4">
             <p className="text-xs text-muted-foreground mb-1">Active Routes</p>
             <p className="text-2xl font-mono font-bold text-green-500">{activeCount}</p>
@@ -119,7 +119,7 @@ export default function Routes() {
               <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
         </div>
 
         {/* Loading */}
@@ -131,7 +131,7 @@ export default function Routes() {
             <Route className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No routes found</h3>
             <p className="text-muted-foreground mb-4">Create jobs with coordinates to see them as routes</p>
-            <Button onClick={() => setShowPlanner(true)}><Brain className="w-4 h-4 mr-2" />Plan AI Route</Button>
+            <Button onClick={() => setShowPlanner(true)}><Brain className="w-4 h-4 mr-2" />Plan route</Button>
           </div>
         )}
 

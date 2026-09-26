@@ -146,9 +146,9 @@ export default function AIRouteDemo() {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-primary/30 bg-primary/5">
             <Zap className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">Live AI Demo</span>
+            <span className="text-sm font-medium text-primary">Interactive demo</span>
           </div>
-          <h2 className="text-4xl font-bold mb-4">Route Sequencing AI</h2>
+          <h2 className="text-4xl font-bold mb-4">Stop sequencing</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Watch MOViDO sequence an 8-drop multi-stop route out of Northampton — distances are calculated from the real drop locations.
           </p>
@@ -213,11 +213,11 @@ export default function AIRouteDemo() {
               {!isOptimizing && !isOptimized && (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-6">
-                    Click to optimize the route sequence using AI
+                    Reorder these drops for the shortest drive
                   </p>
                   <Button onClick={runOptimization} className="glow-cyan group">
                     <Play className="w-4 h-4 mr-2" />
-                    Run AI Optimization
+                    Optimise sequence
                   </Button>
                 </div>
               )}
@@ -308,8 +308,8 @@ export default function AIRouteDemo() {
                     <div>
                       <p className="text-2xl font-bold text-green-500">{savings}% Reduction</p>
                       <p className="text-sm text-muted-foreground">
-                        Save {originalDistance - optimizedDistance} miles and ~{minutesSaved} minutes on this route
-                        (estimated at {AVG_HGV_MPH} mph average)
+                        Save {originalDistance - optimizedDistance} miles and ~{minutesSaved} minutes on this example route (road distance estimated from straight-line distance,
+                        {AVG_HGV_MPH} mph average)
                       </p>
                     </div>
                   </div>
