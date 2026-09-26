@@ -22,6 +22,7 @@ import {
   Smartphone, Route, Navigation, Zap, GripVertical, X, ChevronRight,
 } from "lucide-react";
 import { TomTomMap, tomtomGeocode, tomtomCalculateRoute, type MapMarker, type MapRoute } from "@/components/TomTomMap";
+import { escapeHtml } from "@/lib/html";
 import { useJobs } from "@/hooks/useSupabaseData";
 
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -197,7 +198,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
       markers.push({
         id: wp.id, lat: wp.lat, lng: wp.lng, label: String(seqNum),
         type: wp.type === "pickup" ? "pickup" : wp.type === "delivery" ? "delivery" : "waypoint",
-        popup: `<strong>${wp.address}</strong><br/>${wp.type} ${wp.postcode ? `• ${wp.postcode}` : ""}`,
+        popup: `<strong>${escapeHtml(wp.address)}</strong><br/>${wp.type} ${wp.postcode ? `• ${escapeHtml(wp.postcode)}` : ""}`,
       });
     });
     if (optimized?.alerts) {
@@ -205,7 +206,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
         markers.push({
           id: `alert-${i}`, lat: a.lat, lng: a.lng,
           type: a.type === "low_bridge" ? "bridge" : "caz",
-          popup: `<strong>⚠ ${a.location}</strong><br/>${a.details}`,
+          popup: `<strong>⚠ ${escapeHtml(a.location)}</strong><br/>${escapeHtml(a.details)}`,
         });
       });
     }

@@ -171,43 +171,46 @@ export function useRealtimeDriverLocations() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Initial fetch of all active drivers with locations
+    let active = true;
+    // Positions reported in the last 12 hours (RLS scopes this to the org).
     const fetchDrivers = async () => {
-      const { data } = await supabase
+      const since = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const { data, error } = await supabase
         .from("drivers")
         .select("*")
         .not("location_lat", "is", null)
-        .in("status", ["on_duty", "available"]);
-
-      if (data) setDrivers(data as Driver[]);
+        .gte("location_updated_at", since)
+        .abortSignal(AbortSignal.timeout(15000));
+      if (active && !error && data) setDrivers(data);
     };
 
-    fetchDrivers();
+    void fetchDrivers();
+    // Realtime is the fast path; polling keeps the map live when the
+    // websocket is unavailable (corporate proxies, mobile networks).
+    const poll = setInterval(() => { void fetchDrivers(); }, 20000);
 
-    // Subscribe to location updates only
     const channel = supabase
       .channel("driver-locations")
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "drivers",
-          filter: "location_lat=neq.null",
-        },
+        { event: "UPDATE", schema: "public", table: "drivers" },
         (payload) => {
-          setDrivers(prev =>
-            prev.map(d =>
-              d.id === (payload.new as Driver).id ? (payload.new as Driver) : d
-            )
+          const next = payload.new as Driver;
+          if (next.location_lat == null || next.location_lng == null) return;
+          setDrivers((prev) =>
+            prev.some((d) => d.id === next.id)
+              ? prev.map((d) => (d.id === next.id ? next : d))
+              : [...prev, next],
           );
-        }
+        },
       )
       .subscribe((status) => {
         setIsConnected(status === "SUBSCRIBED");
       });
 
     return () => {
+      active = false;
+      clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -256,10 +259,12 @@ export function useJobs() {
     // this year (RLS scopes the query to the caller's own jobs). Counting rows
     // would reuse numbers after a deletion.
     const prefix = `JOB-${new Date().getFullYear()}-`;
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from("jobs")
       .select("reference")
       .like("reference", `${prefix}%`);
+    // Guessing on failure would hand out a number that is already taken.
+    if (error) throw error;
     const highest = (rows ?? []).reduce((max, row) => {
       const n = Number.parseInt(row.reference.slice(prefix.length), 10);
       return Number.isFinite(n) && n > max ? n : max;

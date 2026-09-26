@@ -246,6 +246,33 @@ type VehicleRow = {
   updated_at: string;
 };
 
+type DriverPositionRow = {
+  id: number;
+  organization_id: string;
+  driver_id: number;
+  vehicle_id: number | null;
+  job_id: number | null;
+  lat: number;
+  lng: number;
+  heading: number | null;
+  speed_mph: number | null;
+  accuracy_m: number | null;
+  recorded_at: string;
+};
+
+type GeofenceEventRow = {
+  id: number;
+  organization_id: string;
+  job_id: number;
+  driver_id: number;
+  target: string;
+  event_type: "arrival" | "departure";
+  lat: number;
+  lng: number;
+  distance_m: number;
+  occurred_at: string;
+};
+
 type TrackingRow = {
   reference: string;
   customer: string;
@@ -273,6 +300,8 @@ export type Database = {
       audit_log: TableDef<AuditLogRow, "action" | "resource_type">;
       driver_invitations: TableDef<DriverInvitationRow, "organization_id" | "driver_id" | "email" | "token_hash" | "expires_at">;
       drivers: TableDef<DriverRow, "name">;
+      geofence_events: TableDef<GeofenceEventRow, "organization_id" | "job_id" | "driver_id" | "target" | "event_type" | "lat" | "lng" | "distance_m">;
+      driver_positions: TableDef<DriverPositionRow, "organization_id" | "driver_id" | "lat" | "lng">;
       fleet_maintenance: TableDef<FleetMaintenanceRow, "vehicle_id" | "type" | "scheduled_date">;
       fuel_logs: TableDef<FuelLogRow, "fuel_amount">;
       incidents: TableDef<IncidentRow, never>;
@@ -294,6 +323,10 @@ export type Database = {
        * returns exactly these columns and deliberately omits phone numbers.
        */
       get_tracking: { Args: { p_token: string }; Returns: TrackingRow[] };
+      driver_report_location: {
+        Args: { p_lat: number; p_lng: number; p_heading?: number; p_speed_mps?: number; p_accuracy_m?: number };
+        Returns: string;
+      };
       driver_update_stop: {
         Args: { p_job_id: number; p_stop_index: number; p_status: string };
         Returns: Json;
@@ -316,6 +349,8 @@ export type MaintenanceRecord = FleetMaintenanceRow;
 export type Incident = IncidentRow;
 export type FuelLog = FuelLogRow;
 export type TrackingInfo = TrackingRow;
+export type DriverPosition = DriverPositionRow;
+export type GeofenceEvent = GeofenceEventRow;
 
 export type InsertVehicle = Database["public"]["Tables"]["vehicles"]["Insert"];
 export type InsertDriver = Database["public"]["Tables"]["drivers"]["Insert"];

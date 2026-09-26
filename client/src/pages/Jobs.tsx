@@ -15,7 +15,9 @@ import { Plus, Search, Filter, Edit, Trash2, ArrowUpDown, Download, RefreshCw, L
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useJobs, useVehicles, useDrivers } from "@/hooks/useSupabaseData";
-import type { Job } from "@/lib/database.types";
+import type { Job, GeofenceEvent } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
+import { tomtomGeocode } from "@/components/TomTomMap";
 
 const statusColors: Record<string, string> = { pending: "bg-amber-500/20 text-amber-500 border-amber-500/30", assigned: "bg-cyan-500/20 text-cyan-500 border-cyan-500/30", in_progress: "bg-blue-500/20 text-blue-500 border-blue-500/30", completed: "bg-green-500/20 text-green-500 border-green-500/30", cancelled: "bg-red-500/20 text-red-500 border-red-500/30" };
 const statusLabels: Record<string, string> = { pending: "Pending", assigned: "Assigned", in_progress: "In Progress", completed: "Completed", cancelled: "Cancelled" };
@@ -27,6 +29,8 @@ interface Stop {
   address: string;
   status?: "pending" | "arrived" | "completed";
   completed_at?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 // Radix Select forbids an empty-string item value (it throws while rendering),
@@ -42,6 +46,8 @@ function parseStops(value: unknown): Stop[] {
       address: typeof s.address === "string" ? s.address : "",
       status: s.status === "arrived" || s.status === "completed" ? s.status : "pending",
       completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
+      lat: typeof s.lat === "number" ? s.lat : null,
+      lng: typeof s.lng === "number" ? s.lng : null,
     }));
 }
 
@@ -103,6 +109,8 @@ export default function Jobs() {
   const [formData, setFormData] = useState<JobFormData>(defaultForm);
   const [isSaving, setIsSaving] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [autoReference, setAutoReference] = useState("");
+  const [geoEvents, setGeoEvents] = useState<GeofenceEvent[] | null>(null);
 
   const { jobs, isLoading, refetch, create, update, remove, generateReference } = useJobs();
   const { vehicles } = useVehicles();
@@ -114,22 +122,41 @@ export default function Jobs() {
     return matchesSearch && (statusFilter === "all" || job.status === statusFilter);
   });
 
-  const buildPayload = () => {
+  /**
+   * Geocode every address so server-side geofencing and the map have
+   * coordinates. An address that cannot be located is still saved; the
+   * dispatcher is told which ones will not trigger arrivals.
+   */
+  const buildPayload = async () => {
     if (formData.eta.trim() && !toEtaIso(formData.scheduled_date, formData.eta)) {
       throw new Error("ETA must be a time such as 14:30");
     }
-    const stops = formData.stops
-      .filter((stop) => stop.address.trim())
-      .map((stop, i) => ({
-        label: stop.label.trim() || `Stop ${i + 1}`,
-        address: stop.address.trim(),
-        status: stop.status ?? "pending",
-        completed_at: stop.completed_at ?? null,
-      }));
+    const stopsIn = formData.stops.filter((stop) => stop.address.trim());
+    const pickup = formData.pickup_address.trim();
+    const delivery = formData.delivery_address.trim();
+    const locate = (address: string) => (address ? tomtomGeocode(address) : Promise.resolve(null));
+    const [pickupPos, deliveryPos, ...stopPos] = await Promise.all([
+      locate(pickup), locate(delivery), ...stopsIn.map((stop) => locate(stop.address.trim())),
+    ]);
+    const unlocated = [pickup && !pickupPos, delivery && !deliveryPos, ...stopPos.map((p) => !p)]
+      .filter(Boolean).length;
+    if (unlocated > 0) {
+      toast.warning(`${unlocated} address${unlocated === 1 ? "" : "es"} could not be located — no arrival alerts for ${unlocated === 1 ? "it" : "them"}.`);
+    }
+    const stops = stopsIn.map((stop, i) => ({
+      label: stop.label.trim() || `Stop ${i + 1}`,
+      address: stop.address.trim(),
+      status: stop.status ?? "pending",
+      completed_at: stop.completed_at ?? null,
+      lat: stopPos[i]?.lat ?? null,
+      lng: stopPos[i]?.lng ?? null,
+    }));
     return {
       customer: formData.customer.trim(), status: formData.status, priority: formData.priority,
-      pickup_address: formData.pickup_address.trim() || null,
-      delivery_address: formData.delivery_address.trim() || null,
+      pickup_address: pickup || null,
+      pickup_lat: pickupPos?.lat ?? null, pickup_lng: pickupPos?.lng ?? null,
+      delivery_address: delivery || null,
+      delivery_lat: deliveryPos?.lat ?? null, delivery_lng: deliveryPos?.lng ?? null,
       scheduled_date: formData.scheduled_date || null,
       eta: formData.eta.trim() ? toEtaIso(formData.scheduled_date, formData.eta) : null,
       vehicle_id: formData.vehicle_id !== NONE ? parseInt(formData.vehicle_id) : null,
@@ -144,12 +171,35 @@ export default function Jobs() {
     if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
     setIsSaving(true);
     try {
-      const payload = buildPayload();
-      const ref = formData.reference.trim() || await generateReference();
-      // Unguessable token for the customer's public live-tracking link
-      await create({ ...payload, reference: ref, tracking_token: newTrackingToken() });
+      const payload = await buildPayload();
+      let ref = formData.reference.trim() || await generateReference();
+      const typed = formData.reference.trim();
+      const autoRef = !typed || typed === autoReference;
+      // The tracking token doubles as an idempotency key: a retry after a
+      // lost response reuses it, and a conflict on a row carrying our token
+      // means the first attempt already succeeded.
+      const token = newTrackingToken();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await create({ ...payload, reference: ref, tracking_token: token });
+          break;
+        } catch (err) {
+          const code = typeof err === "object" && err !== null && "code" in err ? err.code : undefined;
+          const network = err instanceof TypeError || /fetch|network/i.test(errorMessage(err));
+          if (attempt >= 3) throw err;
+          if (code === "23505" || network) {
+            const { data: mine } = await supabase.from("jobs").select("reference").eq("tracking_token", token).maybeSingle();
+            if (mine) { ref = mine.reference; break; }
+          }
+          if (network) { await new Promise((r) => setTimeout(r, 1000 * (attempt + 1))); continue; }
+          // Two dispatchers can take the same next number at once; an
+          // automatic reference is regenerated, a typed one is reported.
+          if (code === "23505" && autoRef) { ref = await generateReference(); continue; }
+          throw err;
+        }
+      }
       setShowAddModal(false); setFormData(defaultForm);
-      toast.success("Job created successfully");
+      toast.success(`Job ${ref} created`);
     } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
     finally { setIsSaving(false); }
   };
@@ -159,7 +209,7 @@ export default function Jobs() {
     if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
     setIsSaving(true);
     try {
-      await update(selectedJobId, { ...buildPayload(), reference: formData.reference.trim() });
+      await update(selectedJobId, { ...(await buildPayload()), reference: formData.reference.trim() });
       setShowEditModal(false); setSelectedJobId(null); setFormData(defaultForm);
       toast.success("Job updated successfully");
     } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
@@ -213,6 +263,14 @@ export default function Jobs() {
   const openDetail = (job: Job) => {
     setSelectedJobId(job.id);
     setShowDetailModal(true);
+    setGeoEvents(null);
+    // Arrivals/departures recorded by server-side geofencing.
+    supabase
+      .from("geofence_events")
+      .select("*")
+      .eq("job_id", job.id)
+      .order("occurred_at", { ascending: true })
+      .then(({ data }) => setGeoEvents(data ?? []));
   };
 
   const addStop = () => {
@@ -230,9 +288,17 @@ export default function Jobs() {
   };
 
   const openAdd = async () => {
-    const ref = await generateReference();
-    setFormData({ ...defaultForm, reference: ref });
+    // Open immediately; the suggested reference fills in when it arrives.
+    setFormData({ ...defaultForm });
+    setAutoReference("");
     setShowAddModal(true);
+    try {
+      const ref = await generateReference();
+      setAutoReference(ref);
+      setFormData((prev) => (prev.reference ? prev : { ...prev, reference: ref }));
+    } catch {
+      /* the reference is generated again on save */
+    }
   };
 
   const selectedJob = jobs.find(j => j.id === selectedJobId);
@@ -366,6 +432,28 @@ export default function Jobs() {
                 {selectedJob.customer_phone && (
                   <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-3"><Phone className="w-3.5 h-3.5 text-green-400" /><span className="text-green-400">{selectedJob.customer_phone}</span></div>
                 )}
+                <div className="bg-muted/20 rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Arrivals &amp; departures (GPS)</p>
+                  {geoEvents === null ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : geoEvents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">None recorded yet.</p>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {geoEvents.map((ev) => (
+                        <li key={ev.id} className="text-xs flex justify-between gap-2">
+                          <span>
+                            {ev.event_type === "arrival" ? "Arrived at" : "Left"}{" "}
+                            {ev.target === "pickup" ? "pickup" : ev.target === "delivery" ? "delivery" : `stop ${Number(ev.target.slice(5)) + 1}`}
+                          </span>
+                          <span className="font-mono text-muted-foreground">
+                            {new Date(ev.occurred_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 {selectedJob.driver_notes && (
                   <div className="bg-muted/20 rounded-lg p-3"><div className="flex items-center gap-1.5 mb-1"><StickyNote className="w-3 h-3 text-amber-400" /><p className="text-xs text-muted-foreground">Driver Notes (from dispatcher)</p></div><p className="text-xs">{selectedJob.driver_notes}</p></div>
                 )}

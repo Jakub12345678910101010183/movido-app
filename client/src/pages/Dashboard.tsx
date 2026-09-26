@@ -18,10 +18,10 @@ import {
   Target, Loader2, Wifi, WifiOff, Sparkles,
 } from "lucide-react";
 import { TomTomMap, type MapMarker } from "@/components/TomTomMap";
+import { escapeHtml } from "@/lib/html";
 import { AIDispatcher } from "@/components/AIDispatcher";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
-import { useGeofencing } from "@/hooks/useGeofencing";
 
 const milesToKm = (miles: number) => miles * 1.60934;
 
@@ -49,6 +49,14 @@ const etaPredictions = [
   { region: "Scotland", activeJobs: 3, avgEta: "3h 20m", confidence: 85 },
 ];
 
+function positionAge(iso: string | null): string {
+  if (!iso) return "time unknown";
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  return `${Math.round(mins / 60)} h ago`;
+}
+
 export default function Dashboard() {
   const [useMiles, setUseMiles] = useState(() => {
     try { return localStorage.getItem("movido-distance-unit") !== "km"; } catch { return true; }
@@ -73,18 +81,17 @@ export default function Dashboard() {
   const { jobs, isLoading: jobsLoading, refetch: refetchJobs } = useJobs();
   const { drivers: liveDrivers, isConnected: realtimeConnected } = useRealtimeDriverLocations();
   const { drivers: allDrivers } = useDrivers();
-  const { checkNow: checkGeofences } = useGeofencing({ radiusMetres: 200, checkIntervalMs: 15000 });
 
   // WTD compliance quick-check
   const wtdAlerts = useMemo(() => {
     const now = new Date();
     const violations: string[] = [];
     const warnings: string[] = [];
+    // Recorded hours only (see WTD page) — nothing is estimated here.
     allDrivers.forEach((d) => {
       if (d.status === "off_duty") return;
-      const base = ((d.id * 7 + 13) % 100) / 100;
-      const todayH = d.status === "on_duty" ? 3 + base * 6 : base * 4;
-      const weekH = 20 + base * 35;
+      const todayH = Number(d.hours_today ?? 0);
+      const weekH = Number(d.hours_week ?? 0);
       if (todayH > 10) violations.push(`${d.name}: daily limit exceeded`);
       else if (todayH > 8) warnings.push(`${d.name}: ${(9 - todayH).toFixed(1)}h daily remaining`);
       if (weekH > 56) violations.push(`${d.name}: weekly limit exceeded`);
@@ -103,7 +110,7 @@ export default function Dashboard() {
         markers.push({
           id: `driver-${driver.id}`, lat: driver.location_lat, lng: driver.location_lng,
           label: vehicle?.vehicle_id || driver.name, type: "vehicle", status: driver.status,
-          popup: `<strong>${driver.name}</strong><br/>${vehicle ? `Vehicle: ${vehicle.vehicle_id}<br/>` : ""}Status: ${driver.status}`,
+          popup: `<strong>${escapeHtml(driver.name)}</strong><br/>${vehicle ? `Vehicle: ${escapeHtml(vehicle.vehicle_id)}<br/>` : ""}Status: ${driver.status}<br/>Updated ${positionAge(driver.location_updated_at)}`,
         });
       }
     });
@@ -115,7 +122,7 @@ export default function Dashboard() {
           markers.push({
             id: `vehicle-${v.id}`, lat: v.location_lat, lng: v.location_lng,
             label: v.vehicle_id, type: "vehicle", status: v.status,
-            popup: `<strong>${v.vehicle_id}</strong><br/>${v.make || ""} ${v.model || ""}<br/>Fuel: ${v.fuel_level}%`,
+            popup: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}<br/>Fuel: ${v.fuel_level ?? "—"}%`,
           });
         }
       });
@@ -124,14 +131,14 @@ export default function Dashboard() {
     if (showHGVLayers) {
       lowBridges.forEach((b) => markers.push({
         id: b.id, lat: b.lat, lng: b.lng, type: "bridge",
-        popup: `<strong>⚠ Low Bridge</strong><br/>${b.name}<br/>Height: <strong>${b.height}m</strong>`,
+        popup: `<strong>⚠ Low Bridge</strong><br/>${escapeHtml(b.name)}<br/>Height: <strong>${b.height}m</strong>`,
       }));
     }
 
     if (showCAZLayers) {
       cazZones.forEach((c) => markers.push({
         id: c.id, lat: c.lat, lng: c.lng, type: "caz",
-        popup: `<strong>Clean Air Zone</strong><br/>${c.name}<br/>Charge: <strong>£${c.charge.toFixed(2)}/day</strong>`,
+        popup: `<strong>Clean Air Zone</strong><br/>${escapeHtml(c.name)}<br/>Charge: <strong>£${c.charge.toFixed(2)}/day</strong>`,
       }));
     }
 
@@ -331,7 +338,7 @@ export default function Dashboard() {
                   <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{vehicleMatch?.status || driverMatch?.status}</p></div>
                   {driverMatch && <div><p className="text-xs text-muted-foreground">Driver</p><p className="font-medium">{driverMatch.name}</p></div>}
                   {vehicleMatch && <><div><p className="text-xs text-muted-foreground">Type</p><p className="font-mono">{vehicleMatch.type.toUpperCase()}</p></div><div><p className="text-xs text-muted-foreground">Fuel</p><p className="font-mono">{vehicleMatch.fuel_level}%</p></div></>}
-                  {driverMatch?.location_lat && <><div><p className="text-xs text-muted-foreground">Lat</p><p className="font-mono text-xs">{driverMatch.location_lat.toFixed(4)}°N</p></div><div><p className="text-xs text-muted-foreground">Lng</p><p className="font-mono text-xs">{Math.abs(driverMatch.location_lng!).toFixed(4)}°W</p></div></>}
+                  {driverMatch?.location_lat && <><div><p className="text-xs text-muted-foreground">Lat</p><p className="font-mono text-xs">{driverMatch.location_lat.toFixed(4)}°N</p></div><div><p className="text-xs text-muted-foreground">Lng</p><p className="font-mono text-xs">{Math.abs(driverMatch.location_lng ?? 0).toFixed(4)}°{(driverMatch.location_lng ?? 0) < 0 ? "W" : "E"}</p></div></>}
                 </div>
               </div>
             );

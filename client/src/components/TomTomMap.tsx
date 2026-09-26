@@ -4,7 +4,8 @@
  * Features: HGV routing, satellite view, low bridge/CAZ layers, driver markers
  */
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
+import { escapeHtml } from "@/lib/html";
 import { cn } from "@/lib/utils";
 
 // TomTom types
@@ -21,39 +22,47 @@ const TOMTOM_BASE = `https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/${TOMTOM_SD
 let sdkLoaded = false;
 let sdkLoading: Promise<void> | null = null;
 
+/** Load one script, retrying a transient failure (mobile / flaky networks). */
+function loadScript(src: string, attempts = 3): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tryLoad = (left: number) => {
+      const el = document.createElement("script");
+      el.src = src;
+      el.async = true;
+      el.onload = () => resolve();
+      el.onerror = () => {
+        el.remove();
+        if (left > 1) setTimeout(() => tryLoad(left - 1), 1500);
+        else reject(new Error(`Failed to load ${src}`));
+      };
+      document.head.appendChild(el);
+    };
+    tryLoad(attempts);
+  });
+}
+
 /**
- * Load TomTom SDK scripts and CSS
+ * Load TomTom SDK scripts and CSS. A failed load is not cached, so the next
+ * attempt (e.g. the map's Retry button) starts again.
  */
 function loadTomTomSDK(): Promise<void> {
   if (sdkLoaded) return Promise.resolve();
   if (sdkLoading) return sdkLoading;
 
-  sdkLoading = new Promise((resolve, reject) => {
-    // Load CSS
+  if (!document.querySelector(`link[href="${TOMTOM_BASE}/maps/maps.css"]`)) {
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = `${TOMTOM_BASE}/maps/maps.css`;
     document.head.appendChild(css);
+  }
 
-    // Load Maps JS
-    const mapsScript = document.createElement("script");
-    mapsScript.src = `${TOMTOM_BASE}/maps/maps-web.min.js`;
-    mapsScript.async = true;
-    mapsScript.onload = () => {
-      // Load Services JS (routing, search, etc.)
-      const servicesScript = document.createElement("script");
-      servicesScript.src = `${TOMTOM_BASE}/services/services-web.min.js`;
-      servicesScript.async = true;
-      servicesScript.onload = () => {
-        sdkLoaded = true;
-        resolve();
-      };
-      servicesScript.onerror = () => reject(new Error("Failed to load TomTom services"));
-      document.head.appendChild(servicesScript);
-    };
-    mapsScript.onerror = () => reject(new Error("Failed to load TomTom maps"));
-    document.head.appendChild(mapsScript);
-  });
+  sdkLoading = loadScript(`${TOMTOM_BASE}/maps/maps-web.min.js`)
+    .then(() => loadScript(`${TOMTOM_BASE}/services/services-web.min.js`))
+    .then(() => { sdkLoaded = true; })
+    .catch((err) => {
+      sdkLoading = null;
+      throw err;
+    });
 
   return sdkLoading;
 }
@@ -136,7 +145,7 @@ function createMarkerElement(marker: MapMarker): HTMLElement {
         font-size: 10px; color: ${color};
         font-family: 'JetBrains Mono', monospace;
         white-space: nowrap;
-      ">${marker.label}</div>` : ""}
+      ">${escapeHtml(marker.label)}</div>` : ""}
     `;
   } else if (marker.type === "bridge" || marker.type === "caz") {
     el.innerHTML = `
@@ -155,7 +164,7 @@ function createMarkerElement(marker: MapMarker): HTMLElement {
     `;
   } else {
     // Numbered waypoint marker
-    const number = marker.label || "•";
+    const number = escapeHtml(marker.label || "•");
     el.innerHTML = `
       <div style="
         width: 30px; height: 30px;
@@ -200,14 +209,24 @@ export function TomTomMap({
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const routeLayersRef = useRef<string[]>([]);
+  const [status, setStatus] = useState<"loading" | "ready" | "failed">(TOMTOM_API_KEY ? "loading" : "failed");
+  const [attempt, setAttempt] = useState(0);
 
   // Initialize map
   useEffect(() => {
+    if (!TOMTOM_API_KEY) return;
     let destroyed = false;
 
     const init = async () => {
-      await loadTomTomSDK();
+      try {
+        await loadTomTomSDK();
+      } catch (err) {
+        console.error("[TomTomMap] SDK load failed:", err);
+        if (!destroyed) setStatus("failed");
+        return;
+      }
       if (destroyed || !containerRef.current || !window.tt) return;
+      setStatus("ready");
 
       const tt = window.tt;
 
@@ -225,6 +244,8 @@ export function TomTomMap({
         center: [initialCenter.lng, initialCenter.lat],
         zoom: initialZoom,
         language: "en-GB",
+        // SDK 6.x: traffic is a style layer toggled here (tile tiers are 5.x).
+        stylesVisibility: { trafficFlow: showTraffic, trafficIncidents: showTraffic },
       };
 
       if (style && mapStyle === "night") {
@@ -246,9 +267,7 @@ export function TomTomMap({
         mapRef.current.addControl(new tt.FullscreenControl(), "top-right");
 
         // Traffic layer
-        if (showTraffic) {
-          mapRef.current.addTier(new tt.TrafficFlowTilesTier());
-        }
+
 
         // Click handler
         if (onMapClick) {
@@ -291,7 +310,7 @@ export function TomTomMap({
         mapRef.current = null;
       }
     };
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attempt]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update markers
   useEffect(() => {
@@ -343,7 +362,7 @@ export function TomTomMap({
         markersRef.current.set(m.id, marker);
       }
     });
-  }, [markers, onMarkerClick]);
+  }, [markers, onMarkerClick, status]);
 
   // Update routes
   useEffect(() => {
@@ -402,14 +421,28 @@ export function TomTomMap({
         console.error("[TomTomMap] Route layer error:", err);
       }
     });
-  }, [routes]);
+  }, [routes, status]);
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("w-full h-[500px]", className)}
-      style={style}
-    />
+    <div className={cn("relative w-full h-[500px]", className)} style={style}>
+      <div ref={containerRef} className="absolute inset-0" />
+      {status === "failed" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/90 text-center p-4">
+          <p className="text-sm text-muted-foreground">
+            {TOMTOM_API_KEY ? "The map could not be loaded. Check your connection." : "Map unavailable: the TomTom key is not configured."}
+          </p>
+          {TOMTOM_API_KEY && (
+            <button
+              type="button"
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
+              onClick={() => { setStatus("loading"); setAttempt((n) => n + 1); }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

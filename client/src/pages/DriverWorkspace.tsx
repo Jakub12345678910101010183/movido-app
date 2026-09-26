@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Truck, MapPin, Navigation, CheckCircle2, Circle, Loader2, Camera, PenLine,
-  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag,
+  RefreshCw, LogOut, ArrowLeft, Phone, StickyNote, Flag, LocateFixed, LocateOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -65,8 +65,146 @@ const STATUS_LABEL: Record<Job["status"], string> = {
   completed: "Completed", cancelled: "Cancelled",
 };
 
+
+type ShareState = "off" | "starting" | "active" | "denied" | "unsupported" | "error";
+const SHARE_KEY = "movido.driver.share_location";
+const MIN_INTERVAL_MS = 15000;
+const MIN_DISTANCE_M = 50;
+
+function metresBetween(a: GeolocationCoordinates, b: GeolocationCoordinates): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Shares the device position while this screen is open. Positions go through
+ * driver_report_location(), which only ever writes the calling driver's own
+ * record. Throttled to one report per 15 s unless the driver moved 50 m.
+ * A browser page cannot report in the background — the UI says so.
+ */
+function useLocationSharing() {
+  const [state, setState] = useState<ShareState>("off");
+  const [lastSent, setLastSent] = useState<Date | null>(null);
+  const watchId = useRef<number | null>(null);
+  const last = useRef<{ at: number; coords: GeolocationCoordinates } | null>(null);
+  const sending = useRef(false);
+
+  const pending = useRef<GeolocationPosition | null>(null);
+  const retryTimer = useRef<number | null>(null);
+
+  const report = useCallback(async (pos: GeolocationPosition, force = false) => {
+    const prev = last.current;
+    const due = force || !prev || Date.now() - prev.at >= MIN_INTERVAL_MS ||
+      metresBetween(prev.coords, pos.coords) >= MIN_DISTANCE_M;
+    if (!due) return;
+    if (sending.current) {
+      pending.current = pos; // newest fix wins once the current send finishes
+      return;
+    }
+    sending.current = true;
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    const { error } = await supabase.rpc("driver_report_location", {
+      p_lat: pos.coords.latitude,
+      p_lng: pos.coords.longitude,
+      p_heading: pos.coords.heading ?? undefined,
+      p_speed_mps: pos.coords.speed ?? undefined,
+      p_accuracy_m: pos.coords.accuracy ?? undefined,
+    });
+    sending.current = false;
+    if (error) {
+      setState("error");
+      // A parked vehicle may not produce a new fix for minutes: resend this
+      // one shortly instead of waiting for the next GPS update.
+      retryTimer.current = window.setTimeout(() => { void report(pending.current ?? pos, true); }, 5000);
+      return;
+    }
+    last.current = { at: Date.now(), coords: pos.coords };
+    setLastSent(new Date());
+    setState("active");
+    const next = pending.current;
+    pending.current = null;
+    if (next && next !== pos) void report(next);
+  }, []);
+
+  const stop = useCallback(() => {
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    pending.current = null;
+    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    watchId.current = null;
+    setState("off");
+    try { window.localStorage.setItem(SHARE_KEY, "off"); } catch { /* storage unavailable */ }
+  }, []);
+
+  const start = useCallback(() => {
+    if (!("geolocation" in navigator)) {
+      setState("unsupported");
+      return;
+    }
+    if (watchId.current !== null) return;
+    setState("starting");
+    try { window.localStorage.setItem(SHARE_KEY, "on"); } catch { /* storage unavailable */ }
+    watchId.current = navigator.geolocation.watchPosition(
+      (pos) => { void report(pos); },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+          setState("denied");
+        } else {
+          setState("error");
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 },
+    );
+  }, [report]);
+
+  useEffect(() => {
+    let wanted = false;
+    try { wanted = window.localStorage.getItem(SHARE_KEY) === "on"; } catch { /* ignore */ }
+    if (wanted) start();
+    return () => {
+      if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+      if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    };
+  }, [start]);
+
+  return { state, lastSent, start, stop };
+}
+
+function LocationBanner({ sharing }: { sharing: ReturnType<typeof useLocationSharing> }) {
+  const { state, lastSent, start, stop } = sharing;
+  const on = state === "active" || state === "starting" || state === "error";
+  const text: Record<ShareState, string> = {
+    off: "Location sharing is off — dispatch cannot see where you are.",
+    starting: "Waiting for a GPS fix…",
+    active: `Sharing live location${lastSent ? ` · sent ${lastSent.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}`,
+    denied: "Location permission was denied. Allow location for this site in your browser settings.",
+    unsupported: "This browser cannot share location.",
+    error: "Could not send your location — retrying with the next GPS fix.",
+  };
+  return (
+    <div className={`rounded-xl border p-3 flex items-center gap-3 ${state === "active" ? "border-green-500/40 bg-green-500/5" : "border-border bg-card"}`}>
+      {on ? <LocateFixed className="w-5 h-5 text-green-500 shrink-0" /> : <LocateOff className="w-5 h-5 text-muted-foreground shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm" role="status">{text[state]}</p>
+        {on && <p className="text-xs text-muted-foreground">Keep this screen open while driving; browsers pause location in the background.</p>}
+      </div>
+      {on ? (
+        <Button size="sm" variant="outline" onClick={stop}>Stop</Button>
+      ) : (
+        <Button size="sm" onClick={start} disabled={state === "unsupported"}>Share</Button>
+      )}
+    </div>
+  );
+}
+
 export default function DriverWorkspace() {
   const { profile, signOut } = useAuthContext();
+  const sharing = useLocationSharing();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -126,11 +264,13 @@ export default function DriverWorkspace() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl p-4">
+      <main className="mx-auto max-w-xl p-4 space-y-4">
+        <LocationBanner sharing={sharing} />
         {openJob ? (
           <JobDetail
             job={openJob}
             onChanged={load}
+            onStarted={() => { if (sharing.state === "off") sharing.start(); }}
             onPatch={(patch) => setJobs((prev) => prev.map((j) => (j.id === openJob.id ? { ...j, ...patch } : j)))}
           />
         ) : loading && jobs.length === 0 ? (
@@ -193,9 +333,10 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
   );
 }
 
-function JobDetail({ job, onChanged, onPatch }: {
+function JobDetail({ job, onChanged, onPatch, onStarted }: {
   job: Job;
   onChanged: () => Promise<void>;
+  onStarted: () => void;
   onPatch: (patch: Partial<Job>) => void;
 }) {
   const stops = parseStops(job.stops);
@@ -211,6 +352,7 @@ function JobDetail({ job, onChanged, onPatch }: {
     if (error) toast.error("Could not start the job");
     else {
       onPatch({ status: "in_progress" });
+      onStarted();
       toast.success("Job started");
       await onChanged();
     }

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { TomTomMap, type MapMarker, type MapRoute } from "@/components/TomTomMap";
+import { escapeHtml } from "@/lib/html";
 
 interface TrackingData {
   job: {
@@ -138,7 +139,7 @@ export default function TrackingPage() {
     if (data.job.delivery_lat && data.job.delivery_lng) {
       markers.push({
         id: "delivery", lat: data.job.delivery_lat, lng: data.job.delivery_lng,
-        type: "delivery", popup: `<strong>Delivery</strong><br/>${data.job.delivery_address}`,
+        type: "delivery", popup: `<strong>Delivery</strong><br/>${escapeHtml(data.job.delivery_address)}`,
       });
     }
 
@@ -147,7 +148,7 @@ export default function TrackingPage() {
       markers.push({
         id: "driver", lat: data.driver.location_lat, lng: data.driver.location_lng,
         type: "vehicle", heading: data.driver.heading || 0,
-        popup: `<strong>${data.driver.name}</strong><br/>${data.vehicle?.registration || ""}`,
+        popup: `<strong>${escapeHtml(data.driver.name)}</strong><br/>${escapeHtml(data.vehicle?.registration)}`,
       });
     }
 
