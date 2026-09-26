@@ -140,6 +140,12 @@ export default function NoDispatchAccess({ role }: Props) {
           </Button>
         )}
 
+        {key === "unknown" && (
+          <Button className="w-full" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+        )}
+
         <Button variant="outline" className="w-full" onClick={() => signOut()}>
           Sign out
         </Button>

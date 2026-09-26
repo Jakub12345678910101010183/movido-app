@@ -46,6 +46,20 @@ function directionsUrl(job: Job, stops: Stop[]): string {
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
+/**
+ * Drivers work on patchy mobile data. Every driver write is idempotent
+ * (set a status, mark a stop, upload to a fresh path), so a failed attempt is
+ * retried a few times before the driver sees an error.
+ */
+async function withRetry<T extends { error: unknown }>(run: () => PromiseLike<T>, attempts = 4): Promise<T> {
+  let result = await run();
+  for (let i = 1; i < attempts && result.error; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000 * i));
+    result = await run();
+  }
+  return result;
+}
+
 const STATUS_LABEL: Record<Job["status"], string> = {
   pending: "Pending", assigned: "Assigned", in_progress: "In progress",
   completed: "Completed", cancelled: "Cancelled",
@@ -114,7 +128,11 @@ export default function DriverWorkspace() {
 
       <main className="mx-auto max-w-xl p-4">
         {openJob ? (
-          <JobDetail job={openJob} onChanged={load} />
+          <JobDetail
+            job={openJob}
+            onChanged={load}
+            onPatch={(patch) => setJobs((prev) => prev.map((j) => (j.id === openJob.id ? { ...j, ...patch } : j)))}
+          />
         ) : loading && jobs.length === 0 ? (
           <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : loadError ? (
@@ -175,7 +193,11 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
   );
 }
 
-function JobDetail({ job, onChanged }: { job: Job; onChanged: () => Promise<void> }) {
+function JobDetail({ job, onChanged, onPatch }: {
+  job: Job;
+  onChanged: () => Promise<void>;
+  onPatch: (patch: Partial<Job>) => void;
+}) {
   const stops = parseStops(job.stops);
   const [busy, setBusy] = useState<string | null>(null);
   const [showPod, setShowPod] = useState(false);
@@ -183,10 +205,12 @@ function JobDetail({ job, onChanged }: { job: Job; onChanged: () => Promise<void
 
   const startJob = async () => {
     setBusy("start");
-    const { error } = await supabase.from("jobs").update({ status: "in_progress" }).eq("id", job.id);
+    const { error } = await withRetry(() =>
+      supabase.from("jobs").update({ status: "in_progress" }).eq("id", job.id));
     setBusy(null);
     if (error) toast.error("Could not start the job");
     else {
+      onPatch({ status: "in_progress" });
       toast.success("Job started");
       await onChanged();
     }
@@ -194,12 +218,14 @@ function JobDetail({ job, onChanged }: { job: Job; onChanged: () => Promise<void
 
   const markStop = async (index: number, status: "arrived" | "completed") => {
     setBusy(`stop-${index}`);
-    const { error } = await supabase.rpc("driver_update_stop", {
+    const { data, error } = await withRetry(() => supabase.rpc("driver_update_stop", {
       p_job_id: job.id, p_stop_index: index, p_status: status,
-    });
+    }));
     setBusy(null);
     if (error) toast.error("Could not update the stop");
     else {
+      // The RPC returns the saved stops: show them even if the refresh fails.
+      onPatch({ stops: data, status: job.status === "in_progress" ? job.status : "in_progress" });
       toast.success(status === "arrived" ? "Arrival recorded" : "Stop delivered");
       await onChanged();
     }
@@ -361,16 +387,20 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
       if (photo) {
         const ext = (photo.name.split(".").pop() || "jpg").toLowerCase();
         photoPath = `${job.organization_id}/${job.id}/${Date.now()}.${ext}`;
-        const { error } = await supabase.storage
+        const path = photoPath;
+        const { error } = await withRetry(() => supabase.storage
           .from("pod-photos")
-          .upload(photoPath, photo, { contentType: photo.type || "image/jpeg" });
-        if (error) throw new Error(`Photo upload failed: ${error.message}`);
+          .upload(path, photo, { contentType: photo.type || "image/jpeg" }));
+        // A retry after a lost response finds the object already stored.
+        if (error && !/already exists|duplicate/i.test(error.message)) {
+          throw new Error(`Photo upload failed: ${error.message}`);
+        }
       }
       const signature = hasSignature ? canvasRef.current?.toDataURL("image/png") ?? null : null;
       const podNotes = [recipient.trim() && `Received by: ${recipient.trim()}`, notes.trim()]
         .filter(Boolean)
         .join("\n");
-      const { error } = await supabase
+      const { error } = await withRetry(() => supabase
         .from("jobs")
         .update({
           status: "completed",
@@ -379,7 +409,7 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
           pod_signature: signature,
           pod_notes: podNotes || null,
         })
-        .eq("id", job.id);
+        .eq("id", job.id));
       if (error) throw new Error(error.message);
       toast.success("Delivery completed");
       await onDone();

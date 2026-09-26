@@ -8,6 +8,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { AIDispatcher } from "@/components/AIDispatcher";
 import { AIRoutePlanner } from "@/components/AIRoutePlanner";
 import {
@@ -39,6 +40,11 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
+function initials(text: string): string {
+  const parts = text.split(/[\s@.]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Briefcase, label: "Jobs", path: "/jobs" },
@@ -61,15 +67,21 @@ const navItems = [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [alertCount] = useState(3);
+  const { profile, signOut } = useAuthContext();
+  // No fabricated counters: badges only render when a real count is wired in.
+  const alertCount = 0;
   const [aiOpen, setAiOpen] = useState(false);
   const [routePlannerOpen, setRoutePlannerOpen] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState(3);
+  const [aiSuggestions, setAiSuggestions] = useState(0);
   const [pulse, setPulse] = useState(true);
-  const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString("en-GB"));
+  const [searchText, setSearchText] = useState("");
+  const [, navigate] = useLocation();
+  const formatClock = () =>
+    new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", timeZoneName: "short" });
+  const [currentTime, setCurrentTime] = useState(formatClock);
 
   useEffect(() => {
-    const tick = setInterval(() => setCurrentTime(new Date().toLocaleTimeString("en-GB")), 1000);
+    const tick = setInterval(() => setCurrentTime(formatClock()), 1000);
     return () => clearInterval(tick);
   }, []);
 
@@ -168,7 +180,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {collapsed ? (
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-full">
+                <Button variant="ghost" size="icon" className="w-full" aria-label="Sign out" onClick={() => signOut()}>
                   <LogOut className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
@@ -177,12 +189,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           ) : (
             <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary">JD</span>
+                <span className="text-xs font-bold text-primary">{initials(profile?.name ?? profile?.email ?? "")}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">John Doe</p>
-                <p className="text-xs text-muted-foreground truncate">Dispatcher</p>
+                <p className="text-sm font-medium truncate">{profile?.name || profile?.email || "Signed in"}</p>
+                <p className="text-xs text-muted-foreground truncate capitalize">{profile?.role ?? ""}</p>
               </div>
+              <Button variant="ghost" size="icon" aria-label="Sign out" onClick={() => signOut()}>
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
           )}
         </div>
@@ -196,8 +211,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
-                type="text"
-                placeholder="Search jobs, vehicles, drivers..."
+                type="search"
+                aria-label="Search jobs"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && searchText.trim()) {
+                    navigate(`/jobs?q=${encodeURIComponent(searchText.trim())}`);
+                  }
+                }}
+                placeholder="Search jobs by reference, customer, address..."
                 className="w-80 h-9 pl-9 pr-4 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50"
               />
             </div>
@@ -205,7 +228,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground font-mono">
-              {currentTime} GMT
+              {currentTime}
             </span>
 
             {/* ── AI PLANER BUTTON ── */}

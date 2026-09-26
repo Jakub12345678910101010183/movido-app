@@ -160,6 +160,8 @@ export default function TrackingPage() {
     const eta = new Date(data.job.eta);
     const now = new Date();
     const diffMs = eta.getTime() - now.getTime();
+    // A long-passed ETA is stale data, not an imminent arrival.
+    if (diffMs < -30 * 60000) return "Awaiting update";
     if (diffMs <= 0) return "Arriving now";
     const mins = Math.floor(diffMs / 60000);
     const hours = Math.floor(mins / 60);
@@ -225,7 +227,7 @@ export default function TrackingPage() {
             <p className="text-4xl font-mono font-bold text-cyan-400">{etaDisplay}</p>
             {data.job.eta && (
               <p className="text-sm text-gray-400 mt-1">
-                ETA: {new Date(data.job.eta).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                ETA: {new Date(data.job.eta).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
               </p>
             )}
           </div>
@@ -280,7 +282,7 @@ export default function TrackingPage() {
                   {isCurrent && data.job.status !== "completed" && (
                     <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full">Current</span>
                   )}
-                  {isCompleted && idx < currentStep && (
+                  {isCompleted && (idx < currentStep || data.job.status === "completed") && (
                     <CheckCircle className="w-4 h-4 text-green-500" />
                   )}
                 </div>
@@ -318,7 +320,7 @@ export default function TrackingPage() {
                   <div>
                     <p className="text-sm font-medium">{data.driver.name}</p>
                     {data.vehicle && (
-                      <p className="text-xs text-gray-500">{data.vehicle.make} {data.vehicle.model} • {data.vehicle.registration}</p>
+                      <p className="text-xs text-gray-500">{[[data.vehicle.make, data.vehicle.model].filter(Boolean).join(" "), data.vehicle.registration].filter(Boolean).join(" • ")}</p>
                     )}
                   </div>
                 </div>
@@ -329,7 +331,7 @@ export default function TrackingPage() {
 
         {/* Footer */}
         <div className="text-center py-4">
-          <p className="text-xs text-gray-600">Powered by Movido Logistics • Northampton</p>
+          <p className="text-xs text-gray-600">Live tracking powered by MOViDO</p>
         </div>
       </div>
     </div>

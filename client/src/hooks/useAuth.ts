@@ -169,11 +169,14 @@ export function useAuth() {
     let active = true;
 
     void (async () => {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
+      // A transient network failure must not look like "no role": retry a
+      // request that failed before giving up. A missing row is not retried.
+      let { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
+      for (let attempt = 1; error && attempt <= 3 && active; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+        if (!active) return;
+        ({ data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle());
+      }
 
       if (!active) return;
       setState(prev => {

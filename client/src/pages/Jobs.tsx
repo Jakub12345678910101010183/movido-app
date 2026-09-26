@@ -53,6 +53,22 @@ function toEtaIso(date: string, time: string): string | null {
   return Number.isNaN(eta.getTime()) ? null : eta.toISOString();
 }
 
+/** 128-bit random hex token (getRandomValues works outside secure contexts too). */
+function newTrackingToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Supabase errors are plain objects, not Error instances. */
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
+    const code = "code" in err ? err.code : undefined;
+    return code === "23505" ? "That reference is already used by another job" : err.message;
+  }
+  return "Something went wrong";
+}
+
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const text = String(value);
@@ -78,7 +94,7 @@ const defaultForm: JobFormData = {
 };
 
 export default function Jobs() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -131,10 +147,10 @@ export default function Jobs() {
       const payload = buildPayload();
       const ref = formData.reference.trim() || await generateReference();
       // Unguessable token for the customer's public live-tracking link
-      await create({ ...payload, reference: ref, tracking_token: crypto.randomUUID() });
+      await create({ ...payload, reference: ref, tracking_token: newTrackingToken() });
       setShowAddModal(false); setFormData(defaultForm);
       toast.success("Job created successfully");
-    } catch (err: unknown) { toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
     finally { setIsSaving(false); }
   };
 
@@ -146,7 +162,7 @@ export default function Jobs() {
       await update(selectedJobId, { ...buildPayload(), reference: formData.reference.trim() });
       setShowEditModal(false); setSelectedJobId(null); setFormData(defaultForm);
       toast.success("Job updated successfully");
-    } catch (err: unknown) { toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`); }
+    } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
     finally { setIsSaving(false); }
   };
 
