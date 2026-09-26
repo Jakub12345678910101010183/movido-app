@@ -119,7 +119,7 @@ export default function Fleet() {
       setShowDeleteModal(false); setSelectedVehicleId(null);
       toast.success("Vehicle removed successfully");
     } catch (err: any) {
-      toast.error(`Failed to delete vehicle: ${err.message}`);
+      toast.error(err.message);
     } finally { setIsSaving(false); }
   };
 

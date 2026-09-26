@@ -13,6 +13,7 @@
  */
 
 import { useState, type FormEvent } from "react";
+import { Link } from "wouter";
 import { Truck, ShieldAlert, Smartphone, Clock, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,8 +98,8 @@ function CreateOrganization() {
         <p className="font-semibold text-sm">Setting up MOViDO for your company?</p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Create your company to start a 14-day trial. You will become its administrator.
-        If you were invited as a driver, open the link in your invitation email instead.
+        Create your company to start a 14-day free trial — no card needed; choose a plan whenever you are ready.
+        You will become its administrator. If you were invited as a driver, open the link in your invitation email instead.
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="org-name">Company name</Label>
@@ -116,6 +117,10 @@ function CreateOrganization() {
         {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
         Create company
       </Button>
+      <p className="text-[11px] text-muted-foreground">
+        By creating a company you accept the <Link href="/terms" className="text-primary hover:underline">Terms</Link> on its
+        behalf. See the <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+      </p>
     </form>
   );
 }

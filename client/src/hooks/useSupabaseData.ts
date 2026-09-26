@@ -12,6 +12,17 @@ import type {
   InsertVehicle, InsertDriver, InsertJob,
 } from "@/lib/database.types";
 
+/**
+ * Delete one row and fail loudly when the database keeps it. RLS filters a
+ * refused delete to "0 rows, no error", and a foreign key refuses with 23503;
+ * both mean the record is still needed, which `refused` explains to the user.
+ */
+async function deleteOrExplain(table: "vehicles" | "drivers" | "jobs", id: number, refused: string) {
+  const { data, error: err } = await supabase.from(table).delete().eq("id", id).select("id");
+  if (err) throw new Error(err.code === "23503" ? refused : err.message);
+  if (!data || data.length === 0) throw new Error(refused);
+}
+
 // ============================================
 // Generic realtime hook
 // ============================================
@@ -113,11 +124,7 @@ export function useVehicles() {
   }, []);
 
   const remove = useCallback(async (id: number) => {
-    const { error: err } = await supabase
-      .from("vehicles")
-      .delete()
-      .eq("id", id);
-    if (err) throw err;
+    await deleteOrExplain("vehicles", id, "This vehicle is still linked to jobs, a driver or maintenance records, so it is kept. Change its status instead.");
   }, []);
 
   return { vehicles: data, isLoading, error, refetch, create, update, remove };
@@ -152,11 +159,7 @@ export function useDrivers() {
   }, []);
 
   const remove = useCallback(async (id: number) => {
-    const { error: err } = await supabase
-      .from("drivers")
-      .delete()
-      .eq("id", id);
-    if (err) throw err;
+    await deleteOrExplain("drivers", id, "Drivers with jobs or a MOViDO login are kept as records. Remove their login on the Team page, or set them off duty.");
   }, []);
 
   return { drivers: data, isLoading, error, refetch, create, update, remove };
@@ -247,11 +250,7 @@ export function useJobs() {
   }, []);
 
   const remove = useCallback(async (id: number) => {
-    const { error: err } = await supabase
-      .from("jobs")
-      .delete()
-      .eq("id", id);
-    if (err) throw err;
+    await deleteOrExplain("jobs", id, "Jobs with proof of delivery are kept as delivery records and cannot be deleted.");
   }, []);
 
   const generateReference = useCallback(async () => {

@@ -11,6 +11,7 @@ import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { AIDispatcher } from "@/components/AIDispatcher";
 import { AIRoutePlanner } from "@/components/AIRoutePlanner";
+import PlanBanner from "@/components/PlanBanner";
 import {
   LayoutDashboard,
   Briefcase,
@@ -323,6 +324,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </Button>
           </div>
         </header>
+
+        <PlanBanner />
 
         {/* Page content */}
         <main className="flex-1 overflow-auto">{children}</main>

@@ -79,6 +79,12 @@ const plans = [
   },
 ];
 
+// Annual plans are the monthly price less 20%, shown per vehicle per month.
+function annualMonthly(monthly: number): string {
+  const v = monthly * 0.8;
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+
 const faqs = [
   {
     question: "How is pricing calculated?",
@@ -233,10 +239,10 @@ export default function Pricing() {
                 <div className="mb-6">
                   {plan.price ? (
                     <>
-                      <span className="text-4xl font-bold font-mono text-cyan">£{isAnnual ? Math.round(plan.price * 0.8) : plan.price}</span>
+                      <span className="text-4xl font-bold font-mono text-cyan">£{isAnnual ? annualMonthly(plan.price) : plan.price}</span>
                       <span className="text-muted-foreground">/ vehicle / month</span>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Billed {isAnnual ? 'annually' : 'monthly'}
+                        {isAnnual ? `Billed annually · 20% off the monthly price` : 'Billed monthly'}
                       </p>
                     </>
                   ) : (
