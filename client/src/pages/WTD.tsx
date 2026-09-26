@@ -145,7 +145,7 @@ export default function WTD() {
       const warnings: string[] = [];
       let complianceStatus: ComplianceStatus = "compliant";
 
-      if (driver.status === "off_duty" || driver.status === "unavailable") {
+      if (driver.status === "off_duty") {
         complianceStatus = "resting";
       } else {
         // Violations

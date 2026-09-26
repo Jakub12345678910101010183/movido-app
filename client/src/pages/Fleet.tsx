@@ -211,8 +211,8 @@ export default function Fleet() {
                   <div className="bg-muted/30 rounded p-2 text-center"><Weight className="w-3 h-3 mx-auto mb-1 text-muted-foreground" /><p className="text-xs text-muted-foreground">Weight</p><p className="font-mono font-bold text-sm">{vehicle.weight || "-"}t</p></div>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
-                  <div className="flex items-center gap-1"><Fuel className="w-3 h-3" /><span className={vehicle.fuel_level < 20 ? "text-red-500" : ""}>{vehicle.fuel_level}%</span></div>
-                  <div className="flex items-center gap-1"><Gauge className="w-3 h-3" /><span>{(vehicle.mileage / 1000).toFixed(0)}k mi</span></div>
+                  <div className="flex items-center gap-1"><Fuel className="w-3 h-3" /><span className={(vehicle.fuel_level ?? 0) < 20 ? "text-red-500" : ""}>{vehicle.fuel_level ?? "—"}%</span></div>
+                  <div className="flex items-center gap-1"><Gauge className="w-3 h-3" /><span>{vehicle.mileage != null ? `${(vehicle.mileage / 1000).toFixed(0)}k mi` : "—"}</span></div>
                   {vehicle.next_service_date && <div className="flex items-center gap-1"><Calendar className="w-3 h-3" /><span>{new Date(vehicle.next_service_date).toLocaleDateString()}</span></div>}
                 </div>
                 <div className="flex items-center gap-2 pt-3 border-t border-border">

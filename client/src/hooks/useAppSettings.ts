@@ -20,7 +20,7 @@ export function useAppSettings() {
       try {
         const { data, error } = await supabase
           .from("app_settings")
-          .select("key, value");
+          .select("key, value, organization_id");
 
         if (error || !data) {
           console.warn("app_settings not found, using defaults:", error?.message);
@@ -28,7 +28,12 @@ export function useAppSettings() {
         }
 
         const parsed: Partial<AppSettings> = {};
-        for (const row of data) {
+        // Platform defaults (organization_id NULL) first, then the
+        // organisation's own overrides so they win.
+        const ordered = [...data].sort(
+          (a, b) => Number(a.organization_id !== null) - Number(b.organization_id !== null),
+        );
+        for (const row of ordered) {
           if (row.key in DEFAULTS) {
             (parsed as Record<string, number>)[row.key] = parseFloat(row.value);
           }

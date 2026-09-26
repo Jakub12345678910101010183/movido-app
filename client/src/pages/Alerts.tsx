@@ -226,7 +226,7 @@ export default function Alerts() {
                         <ExternalLink className="w-3 h-3 mr-1" />View
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => setDismissed((prev) => new Set([...prev, alert.id]))}>
+                    <Button variant="ghost" size="icon" onClick={() => setDismissed((prev) => new Set(prev).add(alert.id))}>
                       <X className="w-4 h-4" />
                     </Button>
                   </div>

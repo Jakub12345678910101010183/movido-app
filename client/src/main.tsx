@@ -1,10 +1,6 @@
-import { initializeTomTomConfig } from './lib/tomtom-config';
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-
-// Initialize TomTom configuration
-initializeTomTomConfig();
 
 /**
  * Global error handlers for robust initialization

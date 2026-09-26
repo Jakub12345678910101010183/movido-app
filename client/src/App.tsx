@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Pricing from "./pages/Pricing";
 import Login from "./pages/Login";
 import Tracking from "./pages/Tracking";
+import DriverWorkspace from "./pages/DriverWorkspace";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Jobs from "./pages/Jobs";
@@ -93,6 +94,11 @@ function Router() {
       </Route>
       <Route path="/wtd">
         <RequireAuth fallback={<Login />}><WTD /></RequireAuth>
+      </Route>
+
+      {/* Driver workspace: only role=driver; data access is enforced by RLS. */}
+      <Route path="/driver">
+        <RequireAuth fallback={<Login />} allow={["driver"]}><DriverWorkspace /></RequireAuth>
       </Route>
 
       <Route path="/404" component={NotFound} />

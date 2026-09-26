@@ -7,7 +7,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type {
-  Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog,
+  Database,
+  Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog, Message,
   InsertVehicle, InsertDriver, InsertJob,
 } from "@/lib/database.types";
 
@@ -15,8 +16,10 @@ import type {
 // Generic realtime hook
 // ============================================
 
+type TableName = keyof Database["public"]["Tables"];
+
 function useRealtimeTable<T extends { id: number | string }>(
-  table: string,
+  table: TableName,
   orderBy: string = "created_at"
 ) {
   const [data, setData] = useState<T[]>([]);
@@ -31,7 +34,8 @@ function useRealtimeTable<T extends { id: number | string }>(
         .order(orderBy, { ascending: false });
 
       if (err) throw err;
-      setData((rows || []) as T[]);
+      // Row type is fixed by the caller's choice of table name.
+      setData((rows ?? []) as unknown as T[]);
       setError(null);
     } catch (err: any) {
       console.error(`[${table}] Fetch error:`, err);
@@ -326,7 +330,7 @@ export function useMessages(currentUserId: string | undefined) {
   const send = useCallback(async (data: {
     recipient_id: string | null;
     content: string;
-    channel?: string;
+    channel?: Message["channel"];
   }) => {
     if (!currentUserId) throw new Error("Not authenticated");
     const { error } = await supabase.from("messages").insert({

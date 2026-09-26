@@ -21,37 +21,38 @@ import { supabase } from "@/lib/supabase";
 import type { FleetMaintenance } from "@/lib/database.types";
 
 const typeColors: Record<string, string> = {
-  oil_change: "bg-amber-500/20 text-amber-400",
-  tyre_check: "bg-blue-500/20 text-blue-400",
-  brake_inspection: "bg-red-500/20 text-red-400",
+  service: "bg-purple-500/20 text-purple-400",
   mot: "bg-green-500/20 text-green-400",
-  full_service: "bg-purple-500/20 text-purple-400",
-  tachograph: "bg-cyan-500/20 text-cyan-400",
-  other: "bg-gray-500/20 text-gray-400",
+  inspection: "bg-red-500/20 text-red-400",
+  tyre: "bg-blue-500/20 text-blue-400",
+  repair: "bg-amber-500/20 text-amber-400",
 };
 
-const typeLabels: Record<string, string> = {
-  oil_change: "Oil Change", tyre_check: "Tyre Check", brake_inspection: "Brake Inspection",
-  mot: "MOT Test", full_service: "Full Service", tachograph: "Tachograph Calibration", other: "Other",
+// Must match the maintenance_type enum in the database.
+const typeLabels: Record<MaintenanceType, string> = {
+  service: "Full Service", mot: "MOT Test", inspection: "Inspection (brakes / safety / tachograph)",
+  tyre: "Tyres", repair: "Repair",
 };
 
 const statusColors: Record<string, string> = {
   scheduled: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  in_progress: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  cancelled: "bg-gray-500/20 text-gray-400 border-gray-500/30",
   completed: "bg-green-500/20 text-green-400 border-green-500/30",
   overdue: "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
+type MaintenanceType = FleetMaintenance["type"];
+
 interface MaintenanceFormData {
   vehicle_id: string;
-  type: string;
+  type: MaintenanceType;
   description: string;
   scheduled_date: string;
   cost: string;
 }
 
 const defaultForm: MaintenanceFormData = {
-  vehicle_id: "", type: "full_service", description: "", scheduled_date: "", cost: "",
+  vehicle_id: "", type: "service", description: "", scheduled_date: "", cost: "",
 };
 
 export default function Maintenance() {
@@ -104,7 +105,7 @@ export default function Maintenance() {
         vehicle_id: parseInt(formData.vehicle_id),
         type: formData.type,
         description: formData.description || null,
-        scheduled_date: new Date(formData.scheduled_date).toISOString(),
+        scheduled_date: formData.scheduled_date,
         cost: formData.cost ? parseFloat(formData.cost) : null,
         status: "scheduled",
       });
@@ -117,7 +118,7 @@ export default function Maintenance() {
 
   const markComplete = async (id: number) => {
     const { error } = await supabase.from("fleet_maintenance")
-      .update({ status: "completed", completed_date: new Date().toISOString() })
+      .update({ status: "completed", completed_date: new Date().toISOString().slice(0, 10) })
       .eq("id", id);
     if (error) { toast.error("Failed"); return; }
     refetch(); toast.success("Marked as complete");
@@ -168,7 +169,7 @@ export default function Maintenance() {
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="scheduled">Scheduled</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -205,7 +206,7 @@ export default function Maintenance() {
                         <span className="font-mono text-sm text-primary">{m.vehicle?.vehicle_id || `#${m.vehicle_id}`}</span>
                       </div>
                     </td>
-                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded ${typeColors[m.type] || typeColors.other}`}>{typeLabels[m.type] || m.type}</span></td>
+                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded ${typeColors[m.type] || typeColors.service}`}>{typeLabels[m.type] || m.type}</span></td>
                     <td className="p-4"><span className="text-sm text-muted-foreground truncate max-w-[200px] block">{m.description || "—"}</span></td>
                     <td className="p-4"><span className="font-mono text-sm">{new Date(m.scheduled_date).toLocaleDateString("en-GB")}</span></td>
                     <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full border ${statusColors[m.computedStatus] || statusColors.scheduled}`}>{m.computedStatus}</span></td>
@@ -236,16 +237,12 @@ export default function Maintenance() {
                 </Select>
               </div>
               <div><Label>Service Type</Label>
-                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v as MaintenanceType })}>
                   <SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="oil_change">Oil Change</SelectItem>
-                    <SelectItem value="tyre_check">Tyre Check</SelectItem>
-                    <SelectItem value="brake_inspection">Brake Inspection</SelectItem>
-                    <SelectItem value="mot">MOT Test</SelectItem>
-                    <SelectItem value="full_service">Full Service</SelectItem>
-                    <SelectItem value="tachograph">Tachograph Calibration</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    {(Object.keys(typeLabels) as MaintenanceType[]).map((t) => (
+                      <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
