@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Truck, LogIn, UserPlus, AlertCircle, Loader2, KeyRound, MailCheck } from "lucide-react";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 
 export default function Login() {
   const { signInWithEmail, signUpWithEmail, requestPasswordReset } = useAuthContext();
@@ -274,6 +274,13 @@ export default function Login() {
                 ? "Send reset link"
                 : "Create Account"}
             </Button>
+            {mode === "register" && (
+              <p className="text-xs text-muted-foreground text-center">
+                14-day free trial, no card needed. By creating an account you agree to the{" "}
+                <Link href="/terms" className="text-primary hover:underline">Terms</Link> and confirm you have read the{" "}
+                <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+              </p>
+            )}
           </form>
 
           <div className="text-center space-y-2">

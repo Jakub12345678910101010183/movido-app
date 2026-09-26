@@ -241,7 +241,7 @@ export default function Jobs() {
     if (!selectedJobId) return;
     setIsSaving(true);
     try { await remove(selectedJobId); setShowDeleteModal(false); setSelectedJobId(null); toast.success("Job deleted"); }
-    catch (err: any) { toast.error(`Failed: ${err.message}`); }
+    catch (err: any) { toast.error(err.message); }
     finally { setIsSaving(false); }
   };
 

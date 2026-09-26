@@ -228,7 +228,7 @@ export default function Drivers() {
     if (!selectedDriverId) return;
     setIsSaving(true);
     try { await remove(selectedDriverId); setShowDeleteModal(false); setSelectedDriverId(null); toast.success("Driver removed"); }
-    catch (err: any) { toast.error(`Failed: ${err.message}`); }
+    catch (err: any) { toast.error(err.message); }
     finally { setIsSaving(false); }
   };
 
