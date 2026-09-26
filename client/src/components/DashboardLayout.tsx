@@ -35,6 +35,7 @@ import {
   ClipboardList,
   Sparkles,
   Menu,
+  UserCog,
 } from "lucide-react";
 
 interface DashboardLayoutProps {
@@ -62,6 +63,7 @@ const navItems = [
   { icon: AlertTriangle, label: "Alerts", path: "/alerts" },
   { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: FileText, label: "Reports", path: "/reports" },
+  { icon: UserCog, label: "Team", path: "/team" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

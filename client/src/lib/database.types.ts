@@ -317,6 +317,9 @@ export type Database = {
       auth_org_id: { Args: never; Returns: string };
       auth_role: { Args: never; Returns: string };
       create_organization: { Args: { p_name: string }; Returns: string };
+      admin_set_user_role: { Args: { p_user: string; p_role: string }; Returns: undefined };
+      admin_remove_user: { Args: { p_user: string }; Returns: undefined };
+      admin_add_user: { Args: { p_email: string; p_role: string }; Returns: string };
       /**
        * Public tracking. The tables behind it are closed to anonymous callers,
        * so this SECURITY DEFINER function is the only public channel. It

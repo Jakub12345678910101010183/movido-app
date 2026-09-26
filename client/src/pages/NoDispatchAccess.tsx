@@ -23,7 +23,7 @@ import type { AppRole } from "@/contexts/AuthContext";
 
 type Props = { role: AppRole | null };
 
-const CONTENT: Record<"driver" | "pending" | "unknown", {
+const CONTENT: Record<"driver" | "pending" | "disabled" | "unknown", {
   icon: typeof Truck;
   title: string;
   body: string;
@@ -43,6 +43,13 @@ const CONTENT: Record<"driver" | "pending" | "unknown", {
       "Your account has been created but does not have any permissions yet. " +
       "An administrator at your company needs to activate it before you can " +
       "sign in to the dispatch centre.",
+  },
+  disabled: {
+    icon: ShieldAlert,
+    title: "Account disabled",
+    body:
+      "An administrator at your company has disabled this account. Contact " +
+      "them if you need access again.",
   },
   unknown: {
     icon: ShieldAlert,
@@ -116,7 +123,7 @@ function CreateOrganization() {
 export default function NoDispatchAccess({ role }: Props) {
   const { signOut, profile } = useAuthContext();
   const canOnboard = role === "pending" && !profile?.organization_id;
-  const key = role === "driver" || role === "pending" ? role : "unknown";
+  const key = role === "driver" || role === "pending" || role === "disabled" ? role : "unknown";
   const { icon: Icon, title, body } = CONTENT[key];
 
   return (
