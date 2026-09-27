@@ -97,7 +97,7 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | **Sign-out failed silently offline**: device stayed signed in when the logout request failed | Local session always cleared | PASS (logout request forced to fail → signed out) |
 | No Privacy Policy / Terms | `/privacy`, `/terms` (drafts with OWNER TO CONFIRM placeholders), linked from footer, sign-up and company creation | PASS (pages live) — **legal review required** |
 | Trial state invisible to customers | Banner: days left / ended / payment failed / cancelled, plans link for admins; no lockout; `lib/subscription.ts` documents where enforcement must go (database) | PASS (new company shows "Free trial: 14 days left") |
-| Annual price displayed rounded (£15 instead of £15.20) | Exact figure + "20% off the monthly price" | PASS (code) |
+| Annual price displayed as a rounded 20% discount that did not match Stripe | Shows the live Stripe annual prices: £190 / £350 per vehicle per year, billed annually (£15.83 / £29.17 per month equivalent) | PASS (production) |
 | Production error screen showed stack traces | Hidden in production, structured console line | PASS (code) |
 | 404 in light theme; canonical/structured data on the redirecting bare domain, claiming iOS/Android apps and AI; robots allowed tracking links | Themed 404; `www` canonical/sitemap; accurate JSON-LD; robots blocks `/track/`, `/driver`, auth pages | PASS (production) |
 
@@ -129,7 +129,7 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | Map rendering | BLOCKED | Styles and tiles load without errors; headless browser cannot draw WebGL | Look once in a real browser |
 | Dead buttons / fake data / claims | PASS | Earlier passes removed fake data and claims; sweep found none remaining | — |
 | Legal pages | CONFIG REQUIRED | `/privacy`, `/terms` live and linked; 20 OWNER TO CONFIRM fields (listed below) | Complete + legal review |
-| Pricing consistency | PASS | £19 / £35 per vehicle per month everywhere; annual = 20% off (£15.20 / £28) | Match Stripe annual prices |
+| Pricing consistency | PASS | £19 / £35 per vehicle per month; annual £190 / £350 per vehicle per year, matching the existing live Stripe annual prices | — |
 | Stripe price ids / allowlist | PASS | Same 4 live ids in the bundle and the server allowlist; unknown price → rejected | — |
 | Stripe checkout / subscription / cancellation / failed payment | BLOCKED | Production checkout → "Online checkout is temporarily unavailable" (test secret key vs live prices); webhook handles created/updated/deleted/paid/failed in code and rejects unsigned/forged (400) | Set live keys, run one real checkout |
 | Trial handling | PASS (display) / CONFIG REQUIRED (policy) | New company: "Free trial: 14 days left"; no enforcement by design | Decide policy |
@@ -155,7 +155,7 @@ analytics — on a 14-day trial basis.
 ### External configuration required
 - Supabase → Edge Functions → Secrets: `STRIPE_SECRET_KEY` (sk_live), `STRIPE_WEBHOOK_SECRET` (live endpoint).
 - Stripe (live): webhook to `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook` with checkout.session.completed,
-  customer.subscription.created/updated/deleted, invoice.paid, invoice.payment_failed; annual prices £182.40 / £336 per vehicle per year.
+  customer.subscription.created/updated/deleted, invoice.paid, invoice.payment_failed; annual prices stay £190 / £350 per vehicle per year (existing live prices, unchanged).
 - Supabase → Auth → URL Configuration: Site URL `https://www.movidologistics.uk`; redirect URLs `/auth/callback`, `/reset-password`, `/accept-invitation`.
 - Supabase plan: Pro for backups and leaked-password protection.
 - TomTom developer portal: restrict the key to `movidologistics.uk` / `www.movidologistics.uk`.
