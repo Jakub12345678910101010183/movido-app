@@ -222,6 +222,38 @@ exists in the project). Replace each `<Todo>…</Todo>` with the final text:
 | 19 | `client/src/pages/Privacy.tsx:95` | Retention of billing records |
 | 20 | `client/src/pages/Privacy.tsx:130` | ICO registration number |
 
+## Technical close-out (2026-09-27, evening)
+
+- **Failed payments — bug fixed**: Stripe status `unpaid` (Stripe's end state when it is set to "mark as unpaid" after the last
+  retry) was stored as `past_due`, i.e. full access forever. Now stored as `unpaid` → restricted like cancelled (MV402 on new
+  jobs/vehicles/drivers). `stripe-webhook` v11; harness 11/11 (new test "retries exhausted" fails on v10, passes on v11);
+  production probe (rolled back): past_due ok, unpaid MV402, cancelled MV402, active ok.
+  Remaining dependency: if Stripe is set to "leave the subscription past-due", access continues indefinitely — the owner
+  setting (cancel after all retries) closes that.
+- **TomTom**: the web app reads only `VITE_TOMTOM_API_KEY` (Vercel); the native app (movido-driver) reads only
+  `EXPO_PUBLIC_TOMTOM_API_KEY`. Separate variables already — only the value is shared. No code change needed; swap the Vercel
+  value once a web-only key exists. The shared key is also committed in the public `movido-driver` repo (`.env`), so it should
+  be regenerated for the native app when the web key is split off.
+- **Supabase**: organisation plan verified Free. Leaked-password protection needs Pro; nothing else is pending.
+
+### Driver apps — status
+- **Native driver app (`movido-driver`, Expo)**: PARTIALLY BUILT — a June 2026 prototype (login, job list/detail, TomTom
+  navigate screen, POD camera + signature, messenger, WTD, truck check, foreground geofence). Not integrated with the current
+  backend: POD uploads to `pod/<job>_…` (storage policy requires `<org>/<job>/…`), truck checks write to a `truck_checks` table
+  that does not exist, no server GPS (`driver_report_location` not used), no multi-stop (`driver_update_stop` not used), no push
+  token registration, no background location task, no offline queue. Not production-ready; not tested.
+- **Web driver workspace (`/driver`)**: working and verified on production — sign-in, assigned jobs, start/deliver, stop
+  arrival/completion (RPC), live location while the screen is open (positions stored, geofence arrival once), POD photo +
+  signature, messages, Google Maps handoff, disabled-account block. Limits of a web page: no background GPS, no push
+  notifications, no offline mode.
+- **Before a native launch the app needs**: storage path and RPC alignment with the current backend; background location
+  (TaskManager) via `driver_report_location`; push notifications (token storage + server sender — neither exists yet);
+  multi-stop workflow via `driver_update_stop`; offline queue for status/POD; vehicle checks backed by a real table and
+  office view; incident/fuel reporting (not in the native app); invitation-based sign-in flow; store builds (EAS) and testing.
+
+### Missing features (reported, not built)
+- CSV **import** (only CSV export exists; not advertised).
+
 ### Known limitation
 If a driver opens the invitation email but closes the page before setting a password, the email link is used up while the
 invitation stays pending for its 7-day validity, and the dispatcher cannot re-send until it expires. "Forgot password" alone
@@ -276,4 +308,4 @@ production, align it once (metadata only, no schema change):
 `supabase migration repair --status reverted <each old version>` then
 `supabase migration repair --status applied 20260927000000`.
 
-Edge Functions: `create-checkout-session` v12, `stripe-webhook` v10, `send-verification-email` retired (v3, 410), `ops-subscription-quantity` retired (v2, 410).
+Edge Functions: `create-checkout-session` v12, `stripe-webhook` v11, `send-verification-email` retired (v3, 410), `ops-subscription-quantity` retired (v2, 410).
