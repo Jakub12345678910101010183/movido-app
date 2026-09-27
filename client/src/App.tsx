@@ -21,6 +21,7 @@ import Drivers from "./pages/Drivers";
 import Routes from "./pages/Routes";
 import Messenger from "./pages/Messenger";
 import Maintenance from "./pages/Maintenance";
+import VehicleChecks from "./pages/VehicleChecks";
 import POD from "./pages/POD";
 import Alerts from "./pages/Alerts";
 import Analytics from "./pages/Analytics";
@@ -72,6 +73,9 @@ function Router() {
       </Route>
       <Route path="/maintenance">
         <RequireAuth fallback={<Login />}><Maintenance /></RequireAuth>
+      </Route>
+      <Route path="/vehicle-checks">
+        <RequireAuth fallback={<Login />}><VehicleChecks /></RequireAuth>
       </Route>
       <Route path="/pod">
         <RequireAuth fallback={<Login />}><POD /></RequireAuth>

@@ -122,6 +122,10 @@ type FuelLogRow = {
   location_lat: number | null;
   location_lng: number | null;
   created_at: string;
+  /** Set by the driver app (driver_log_fuel). */
+  price_per_litre?: number | null;
+  receipt_path?: string | null;
+  client_request_id?: string | null;
 };
 
 type IncidentRow = {
