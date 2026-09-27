@@ -1,6 +1,6 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-26 · Final production gate run 2026-09-26 on `main` @ `82266c0` (production = this commit)
+Last updated: 2026-09-27 · Final production hardening merged in PR #13 (`main` @ `bfd44b6`)
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
@@ -142,38 +142,46 @@ Status legend: **PASS** = actually exercised and verified · **FAIL** = tested a
 | Domain / HTTPS / canonical / sitemap / robots / 404 | PASS | www canonical; sitemap lists 4 public pages; robots blocks private and tracking paths; unknown paths show the themed 404 | — |
 | Data safety | PASS | No reset/destructive scripts wired to build or deploy; seed is manual and insert-only; Movido data untouched; QA data in isolated companies | Optional cleanup (plan below) |
 
-### Can sell now
-Dispatch (jobs, multi-stop, assignment), driver workspace with foreground GPS, arrival/departure records, proof of delivery,
-customer tracking links, team management, fleet/drivers, incidents, fuel, maintenance, messaging, documents, reports and
-analytics — on a 14-day trial basis.
+### Superseded
+The verdict above is from 2026-09-26. See **Final production hardening (2026-09-27)** below for the current state.
 
-### Must fix before first paying customer
-1. Stripe: live secret key + live webhook secret in Supabase; one successful real checkout (currently checkout cannot start).
-2. Legal: complete the OWNER TO CONFIRM fields and have Privacy Policy and Terms reviewed.
-3. Email: confirm with a real mailbox that sign-up confirmation, password reset and driver invitation emails arrive and their links work.
+## Final production hardening (2026-09-27)
 
-### External configuration required
-- Supabase → Edge Functions → Secrets: `STRIPE_SECRET_KEY` (sk_live), `STRIPE_WEBHOOK_SECRET` (live endpoint).
-- Stripe (live): webhook to `https://zjvozjnbvrtrrpehqdpf.supabase.co/functions/v1/stripe-webhook` with checkout.session.completed,
-  customer.subscription.created/updated/deleted, invoice.paid, invoice.payment_failed; annual prices stay £190 / £350 per vehicle per year (existing live prices, unchanged).
-- Supabase → Auth → URL Configuration: Site URL `https://www.movidologistics.uk`; redirect URLs `/auth/callback`, `/reset-password`, `/accept-invitation`.
-- Supabase plan: Pro for backups and leaked-password protection.
-- TomTom developer portal: restrict the key to `movidologistics.uk` / `www.movidologistics.uk`.
+| Area | Result | Evidence |
+|---|---|---|
+| Webhook event ordering | PASS | `customer.subscription.*` now re-read the subscription from Stripe (v10). Harness running the real function with signed events: created, updated, deleted, duplicate, out-of-order, invalid signature, unknown org, unrelated event, failed→recovered, checkout — 10/10 (before the fix: created and out-of-order FAIL). Production still 400 on unsigned/forged. |
+| Schema reproducibility | PASS | Baseline migration; empty DB → identical DDL; behavioural check (see Database baseline). |
+| Trial expiry / plan states | PASS | `20260927120000_subscription_access.sql`. Rolled-back probe on production: trial live ok; trial ended, cancelled, unknown → MV402 on jobs/vehicles/drivers, reads still work; past_due ok; Movido (active, stale trial date) ok; service_role exempt. Browser (QA org, trial temporarily ended then restored): banner at 390/1440, inserts refused, jobs readable, checkout still opens. |
+| Trial 5-vehicle limit | PASS | Fresh DB and production probes: 6th vehicle MV409. |
+| Driver limit | None (by design) | Driver inserts not limited; Movido (8 vehicles on quantity 1) can still add drivers. |
+| Email | PASS | Real mailbox (mail.tm), sender `noreply@movidologistics.uk`: signup confirmation → `/auth/callback` → onboarding → dashboard; forgot password → `/reset-password` → new password → sign in; driver invitation → `/accept-invitation` → account activated, linked to the driver, role driver. |
+| Auth URLs | PASS | Links carry the three redirect URLs; a foreign `redirect_to` falls back to Site URL `https://www.movidologistics.uk`. |
+| HTTP 404 | PASS | Unknown paths (`/foo/bar`, `/dashboard/extra`) → 404 with the app's Not Found page; all app routes, `/track/:token`, static files and `/api/keep-alive` → 200. |
+| Security re-audit | PASS | No RLS-off tables; all SECURITY DEFINER functions pin search_path; anon gets `[]` on every table, 42501 on RPCs/invitations, empty storage lists; cross-tenant probe (admin and driver of a QA org vs Movido): 0 rows seen/changed, spoofed org re-stamped, role/org self-escalation ignored. |
+| Tracking privacy | PASS | Token ≥ 32 chars; driver first name only; location only while in progress; no phone/pickup. |
+| Browser smoke (production) | PASS | QA companies on www.movidologistics.uk: login, job create, team isolation, driver GPS, start/deliver, live map, POD signed photo, map/ETA, analytics, CSV, incident, fuel, message, document scan, settings, trial banner, maintenance, disable/re-enable driver. Sweep of 25 screens × 390 px and 1440 px (public, admin, driver): no horizontal overflow, no page errors, no broken images; one icon button on Settings has no accessible name. |
+| Live checkout ×4 | PASS (amounts not observed) | Starter/Professional × monthly/annual: function 200, distinct live price IDs, redirect to `cs_live_…`. No payment made. The Stripe page text is not readable in the test browser, so amounts/currency were not observed there. |
 
-### OWNER TO CONFIRM fields (legal pages)
-Company number · registered address · dedicated privacy contact · DPA availability · international transfers/safeguards ·
-retention for driver location history · retention for POD and jobs · retention after account closure · retention of billing
-records · ICO registration number · VAT treatment · how to cancel / notice / refunds · access after trial / failed payment ·
-export/deletion process after termination · support hours · limitation of liability · termination rights · notice period for
-changes · governing law and courts.
+### Configuration required (owner)
+- **Stripe quantity for Movido Logistics Ltd**: raise the subscription quantity from 1 to 8 (Stripe → Customers → subscription → Update quantity). The webhook then sets max_vehicles = 8 and a 9th vehicle is refused. Lowering it later never deletes vehicles.
+- **Stripe failed payments**: Billing → Subscriptions and emails → Manage failed payments → after the final retry, *cancel the subscription*. MOViDO keeps full access while `past_due`; with "leave past due"/"mark unpaid" a customer who never pays would keep access.
+- **Supabase Pro** (backups, leaked-password protection) — billing change, not done.
+- **TomTom**: restrict the key to `movidologistics.uk` and `www.movidologistics.uk` (developer portal).
+- **movidologistics.com**: not attached to Vercel (apex 404, www no response). Attach and point DNS, or don't advertise it.
+- **Legal**: the fields below; shown to visitors as "(to be confirmed)".
+- **Migration history**: align once with `supabase migration repair` (see Database baseline) before using `supabase db push`.
 
-### Optional after launch
-Content-Security-Policy header; error alerting; native driver app for background GPS; QA data cleanup; trial enforcement once decided.
+### Owner checklist — legal fields
+Terms: company number · registered address · VAT treatment · how to cancel / notice / refunds · export/deletion process after
+termination · support hours / response targets · limitation of liability (lawyer) · termination rights and data · notice period
+for changes · governing law and courts. Privacy: company number · registered address · privacy contact · DPA availability ·
+international transfers and safeguards · retention for location history · retention for POD/jobs · retention after closure ·
+retention of billing records · ICO registration number.
 
-### Final verdict
-Not yet ready for a first **paying** customer: payment cannot be taken (Stripe BLOCKED by test/live key mismatch) and the legal
-documents are unfinished drafts. Everything else in the product was verified on production and is ready; trial customers can use it
-today, subject to confirming that auth emails are delivered.
+### Known limitation
+If a driver opens the invitation email but closes the page before setting a password, the email link is used up while the
+invitation stays pending for its 7-day validity, and the dispatcher cannot re-send until it expires. "Forgot password" alone
+does not link the account to the driver. Verified in QA; not changed in this pass.
 
 ## QA data cleanup plan (not executed)
 
@@ -193,6 +201,17 @@ go with them). Keep the Movido Logistics Ltd company untouched.
 See the cleanup plan above. The two journey test accounts had their e-mail confirmed directly in the database
 (data-only migrations `qa_confirm_journey_test_account`, `qa_confirm_journey_staff_account`) because no mailbox exists for
 `qa.movidologistics.uk`. Existing Movido Logistics Ltd data was not modified.
+
+Added on 2026-09-27 (all QA, no charges):
+- Company "QA Email Signup Ltd" with admin `movido-qa-signup2-…@uberip.com` (signup/reset test); user
+  `movido-qa-signup-…@uberip.com` (confirmed, no company). Disposable mail.tm mailboxes.
+- In "QA Journey 453159 Ltd": driver "QA Invite Driver" linked to `movido-qa-invite-…@uberip.com` and its accepted invitation.
+  Its trial end date was moved back one day for a UI check and restored to the exact original value
+  (data migrations `qa_expire_journey_trial_for_ui_test`, `qa_restore_journey_trial_after_ui_test`).
+- In "QA Isolated Haulage Ltd": smoke-test job JOB-2026-008 with POD, positions, incident, fuel log, message, scanned document,
+  maintenance entry.
+- Stripe: open live Checkout Sessions from the four-plan check (unpaid; they expire on their own). No customers charged.
+- Every probe of production behaviour ran inside a transaction that was rolled back.
 
 ## Database baseline
 
