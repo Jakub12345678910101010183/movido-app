@@ -127,9 +127,12 @@ Deno.serve(async (req: Request) => {
       }
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted":
-        await applySubscription(event.data.object as Stripe.Subscription);
+      case "customer.subscription.deleted": {
+        // Events can arrive out of order; the current subscription is authoritative.
+        const snapshot = event.data.object as Stripe.Subscription;
+        await applySubscription(await stripe.subscriptions.retrieve(snapshot.id));
         break;
+      }
       case "invoice.paid":
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
