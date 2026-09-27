@@ -31,7 +31,7 @@ export default function PlanBanner() {
 
   const warn = state.kind !== "trial";
   const text =
-    state.kind === "trial" ? `Free trial: ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left. No card needed until you subscribe.`
+    state.kind === "trial" ? `Free trial: ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left (up to 5 vehicles). No card needed until you subscribe.`
     : state.kind === "trial_ended" ? "Your free trial has ended. Choose a plan to subscribe."
     : state.kind === "past_due" ? "Your last payment failed. Stripe emails your billing contact a link to pay; contact us if you need help."
     : "Your subscription is cancelled. Choose a plan to subscribe again.";
