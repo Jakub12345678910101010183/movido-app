@@ -1,6 +1,6 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-27 · Final production hardening merged in PR #13 (`main` @ `bfd44b6`)
+Last updated: 2026-09-27 · Owner configuration close-out (see "Owner configuration close-out")
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
@@ -151,7 +151,7 @@ The verdict above is from 2026-09-26. See **Final production hardening (2026-09-
 |---|---|---|
 | Webhook event ordering | PASS | `customer.subscription.*` now re-read the subscription from Stripe (v10). Harness running the real function with signed events: created, updated, deleted, duplicate, out-of-order, invalid signature, unknown org, unrelated event, failed→recovered, checkout — 10/10 (before the fix: created and out-of-order FAIL). Production still 400 on unsigned/forged. |
 | Schema reproducibility | PASS | Baseline migration; empty DB → identical DDL; behavioural check (see Database baseline). |
-| Trial expiry / plan states | PASS | `20260927120000_subscription_access.sql`. Rolled-back probe on production: trial live ok; trial ended, cancelled, unknown → MV402 on jobs/vehicles/drivers, reads still work; past_due ok; Movido (active, stale trial date) ok; service_role exempt. Browser (QA org, trial temporarily ended then restored): banner at 390/1440, inserts refused, jobs readable, checkout still opens. |
+| Trial expiry / plan states | PASS | `20260927141239_subscription_access.sql`. Rolled-back probe on production: trial live ok; trial ended, cancelled, unknown → MV402 on jobs/vehicles/drivers, reads still work; past_due ok; Movido (active, stale trial date) ok; service_role exempt. Browser (QA org, trial temporarily ended then restored): banner at 390/1440, inserts refused, jobs readable, checkout still opens. |
 | Trial 5-vehicle limit | PASS | Fresh DB and production probes: 6th vehicle MV409. |
 | Driver limit | None (by design) | Driver inserts not limited; Movido (8 vehicles on quantity 1) can still add drivers. |
 | Email | PASS | Real mailbox (mail.tm), sender `noreply@movidologistics.uk`: signup confirmation → `/auth/callback` → onboarding → dashboard; forgot password → `/reset-password` → new password → sign in; driver invitation → `/accept-invitation` → account activated, linked to the driver, role driver. |
@@ -162,21 +162,65 @@ The verdict above is from 2026-09-26. See **Final production hardening (2026-09-
 | Browser smoke (production) | PASS | QA companies on www.movidologistics.uk: login, job create, team isolation, driver GPS, start/deliver, live map, POD signed photo, map/ETA, analytics, CSV, incident, fuel, message, document scan, settings, trial banner, maintenance, disable/re-enable driver. Sweep of 25 screens × 390 px and 1440 px (public, admin, driver): no horizontal overflow, no page errors, no broken images; one icon button on Settings has no accessible name. |
 | Live checkout ×4 | PASS (amounts not observed) | Starter/Professional × monthly/annual: function 200, distinct live price IDs, redirect to `cs_live_…`. No payment made. The Stripe page text is not readable in the test browser, so amounts/currency were not observed there. |
 
-### Configuration required (owner)
-- **Stripe quantity for Movido Logistics Ltd**: raise the subscription quantity from 1 to 8 (Stripe → Customers → subscription → Update quantity). The webhook then sets max_vehicles = 8 and a 9th vehicle is refused. Lowering it later never deletes vehicles.
-- **Stripe failed payments**: Billing → Subscriptions and emails → Manage failed payments → after the final retry, *cancel the subscription*. MOViDO keeps full access while `past_due`; with "leave past due"/"mark unpaid" a customer who never pays would keep access.
-- **Supabase Pro** (backups, leaked-password protection) — billing change, not done.
-- **TomTom**: restrict the key to `movidologistics.uk` and `www.movidologistics.uk` (developer portal).
-- **movidologistics.com**: not attached to Vercel (apex 404, www no response). Attach and point DNS, or don't advertise it.
-- **Legal**: the fields below; shown to visitors as "(to be confirmed)".
-- **Migration history**: align once with `supabase migration repair` (see Database baseline) before using `supabase db push`.
+## Owner configuration close-out (2026-09-27)
 
-### Owner checklist — legal fields
-Terms: company number · registered address · VAT treatment · how to cancel / notice / refunds · export/deletion process after
-termination · support hours / response targets · limitation of liability (lawyer) · termination rights and data · notice period
-for changes · governing law and courts. Privacy: company number · registered address · privacy contact · DPA availability ·
-international transfers and safeguards · retention for location history · retention for POD/jobs · retention after closure ·
-retention of billing records · ICO registration number.
+Done:
+- **Stripe — Movido Logistics Ltd**: live subscription quantity changed 1 → 8 (owner-authorised). Before: one active
+  subscription, Starter monthly £19.00 GBP, quantity 1. After: quantity 8, active, same price. Stripe's default proration adds
+  the 7 extra vehicles for the current period to the next invoice (27 Oct 2026: £284.41); nothing was charged at the time.
+  Webhook `customer.subscription.updated` → `max_vehicles = 8`; still 8 vehicles, 10 jobs, 6 drivers; 9th vehicle refused (MV409,
+  rolled-back probe). Done through a one-off Edge Function `ops-subscription-quantity` (Movido only, one-time token, server-side
+  key); it now returns 410 and does nothing.
+- **UK domain**: `.com` redirect rules removed from `vercel.json`; guide and comments updated. `www.movidologistics.uk` is the
+  only production domain (canonical, sitemap, robots, structured data, Stripe return URLs, invitation/reset/confirmation links,
+  tracking links all verified on .uk). `movidologistics.com` is not used and needs nothing.
+- **Migrations**: repo = `20260927000000_production_baseline.sql` + `20260927141239_subscription_access.sql` (version now matches
+  production's history). Production schema regenerated and compared: identical to these two files applied to an empty database.
+
+### Owner actions remaining
+1. **Stripe failed payments** — Stripe Dashboard → Settings → Billing → *Subscriptions and emails* (newer dashboards:
+   Billing → *Revenue recovery* → *Retries*). Keep Smart Retries on; set **"If all retries for a payment fail" → "Cancel the
+   subscription"**. Why: MOViDO keeps full access while `past_due`; cancelling ends access for customers who never pay. This
+   setting is not available through the Stripe API, so it could not be set or read here.
+2. **Supabase Pro** — supabase.com/dashboard → organisation "Movido" → Billing → Change plan → **Pro**. Then Authentication →
+   Providers → Email (or Auth → Password security) → enable **Leaked password protection**. Why: the project is on Free (verified):
+   no daily backups; leaked-password protection is a Pro feature. Paid change — not done here.
+3. **TomTom key** — the website and the native driver app (movido-driver) use the **same** key, and it works from any website
+   (verified: a request with `Origin: https://evil.example` returns a route). Restricting that key to the website domains would
+   break the phone app, which sends no browser origin. Do: developer.tomtom.com → Dashboard → *Keys* → create a new key
+   "MOViDO web" with **Domain whitelist** `movidologistics.uk` and `www.movidologistics.uk` (Routing, Search, Traffic, Map
+   Display) → Vercel → project movido-app → Settings → Environment Variables → `VITE_TOMTOM_API_KEY` (Production) = new key →
+   Redeploy. Keep the existing key for the driver app only.
+4. **Legal fields** — the 20 fields below.
+5. **Before the first `supabase db push`** (only if the CLI is used): `supabase migration repair --status reverted` for every
+   remote version except `20260927141239`, then `supabase migration repair --status applied 20260927000000`. Metadata only.
+
+### Owner checklist — legal fields (shown to visitors as "(to be confirmed)")
+None could be verified from project data (the Movido organisation record has no address; no company number, ICO or VAT data
+exists in the project). Replace each `<Todo>…</Todo>` with the final text:
+
+| # | File:line | Field |
+|---|---|---|
+| 1 | `client/src/pages/Terms.tsx:10` | Company number |
+| 2 | `client/src/pages/Terms.tsx:10` | Registered office address |
+| 3 | `client/src/pages/Terms.tsx:55` | VAT treatment of prices |
+| 4 | `client/src/pages/Terms.tsx:57` | How to cancel, notice period, refunds |
+| 5 | `client/src/pages/Terms.tsx:75` | Data export/deletion process and timescale after termination |
+| 6 | `client/src/pages/Terms.tsx:93` | Support hours / response targets |
+| 7 | `client/src/pages/Terms.tsx:99` | Limitation of liability (lawyer) |
+| 8 | `client/src/pages/Terms.tsx:106` | Termination rights, notice, what happens to data |
+| 9 | `client/src/pages/Terms.tsx:112` | Notice period for material changes |
+| 10 | `client/src/pages/Terms.tsx:113` | Governing law and courts |
+| 11 | `client/src/pages/Privacy.tsx:10` | Company number |
+| 12 | `client/src/pages/Privacy.tsx:10` | Registered office address |
+| 13 | `client/src/pages/Privacy.tsx:12` | Dedicated privacy contact (or state the general contact) |
+| 14 | `client/src/pages/Privacy.tsx:26` | Data Processing Agreement availability |
+| 15 | `client/src/pages/Privacy.tsx:86` | International transfers and safeguards |
+| 16 | `client/src/pages/Privacy.tsx:94` | Retention: driver location history |
+| 17 | `client/src/pages/Privacy.tsx:94` | Retention: proof of delivery and jobs |
+| 18 | `client/src/pages/Privacy.tsx:95` | Retention after an account is closed |
+| 19 | `client/src/pages/Privacy.tsx:95` | Retention of billing records |
+| 20 | `client/src/pages/Privacy.tsx:130` | ICO registration number |
 
 ### Known limitation
 If a driver opens the invitation email but closes the page before setting a password, the email link is used up while the
@@ -232,4 +276,4 @@ production, align it once (metadata only, no schema change):
 `supabase migration repair --status reverted <each old version>` then
 `supabase migration repair --status applied 20260927000000`.
 
-Edge Functions: `create-checkout-session` v12, `stripe-webhook` v10, `send-verification-email` retired (v3, 410).
+Edge Functions: `create-checkout-session` v12, `stripe-webhook` v10, `send-verification-email` retired (v3, 410), `ops-subscription-quantity` retired (v2, 410).

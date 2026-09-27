@@ -11,18 +11,6 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "movidologistics.com" }],
-      "destination": "https://movidologistics.uk/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.movidologistics.com" }],
-      "destination": "https://movidologistics.uk/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
       "has": [{ "type": "host", "value": "movidologistics.uk" }],
       "destination": "https://www.movidologistics.uk/$1",
       "permanent": true

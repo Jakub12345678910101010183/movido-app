@@ -2,11 +2,11 @@
 
 ## Architecture
 ```
-movidologistics.com/           → Home (marketing landing page)
-movidologistics.com/pricing    → Pricing page
-movidologistics.com/login      → Supabase auth login
-movidologistics.com/dashboard  → Dispatch Center
-movidologistics.com/track/:id  → Public delivery tracking (no auth)
+www.movidologistics.uk/           → Home (marketing landing page)
+www.movidologistics.uk/pricing    → Pricing page
+www.movidologistics.uk/login      → Supabase auth login
+www.movidologistics.uk/dashboard  → Dispatch Center
+www.movidologistics.uk/track/:id  → Public delivery tracking (no auth)
 
 Movido Driver App              → Expo (Android/iOS)
 ```
@@ -77,9 +77,8 @@ VITE_TOMTOM_API_KEY=your-tomtom-key
 ```
 
 ### Custom domain:
-1. In Vercel: Settings > Domains > Add `movidologistics.com`
-2. Vercel gives you DNS records (A record or CNAME)
-3. Update DNS at your registrar (or Cloudflare) to point to Vercel
+Production is `https://www.movidologistics.uk` only (UK product). `movidologistics.uk` redirects to it.
+`movidologistics.com` is not used and needs no configuration.
 
 ## Step 3: Driver App (Expo)
 
@@ -101,16 +100,6 @@ npx eas build --platform android --profile preview
 # Build for iOS (requires Apple Developer account)
 npx eas build --platform ios --profile preview
 ```
-
-## Step 4: Transfer Domain (from Manus to Cloudflare)
-
-1. Ask Manus for EPP/authorization code
-2. Go to https://dash.cloudflare.com
-3. Add site > movidologistics.com
-4. Cloudflare gives you nameservers
-5. At Manus/current registrar: change nameservers to Cloudflare's
-6. In Cloudflare DNS: add records pointing to Vercel
-7. Wait 24-48h for propagation
 
 ## Tech Stack Summary
 - **Frontend**: Vite + React 19 + Tailwind 4 + shadcn/ui
