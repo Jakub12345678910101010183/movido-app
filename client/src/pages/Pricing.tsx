@@ -90,7 +90,7 @@ function monthlyEquivalent(annual: number): string {
 const faqs = [
   {
     question: "How is pricing calculated?",
-    answer: "Pricing is per vehicle, billed monthly or annually. At checkout the quantity starts at the number of vehicles in your account, and you can adjust it."
+    answer: "You pay for each vehicle on your subscription, monthly or annually. At checkout the quantity starts at the number of vehicles in your account, and you can adjust it. Drivers and office users are not limited. To add more vehicles later, contact us to increase the quantity on your subscription."
   },
   {
     question: "Can I change plans later?",
@@ -98,7 +98,7 @@ const faqs = [
   },
   {
     question: "Is there a free trial?",
-    answer: "Yes. Every new company account gets a 14-day free trial with all features. No card is needed to start — you subscribe when you are ready."
+    answer: "Yes. Every new company account gets a 14-day free trial with all features for up to 5 vehicles. No card is needed to start — you subscribe when you are ready."
   },
   {
     question: "Do you support UK-specific requirements?",
@@ -201,7 +201,7 @@ export default function Pricing() {
             </div>
             <h1 className="text-5xl font-bold mb-4">Simple, Transparent Pricing</h1>
             <p className="text-xl text-muted-foreground mb-8">
-              Per vehicle, billed monthly or annually. Start with a 14-day free trial.
+              Per vehicle, billed monthly or annually. Start with a 14-day free trial for up to 5 vehicles.
             </p>
             
             {/* Billing Toggle */}
@@ -554,7 +554,7 @@ export default function Pricing() {
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-4xl font-bold mb-4">Try MOViDO with your own fleet</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Start your 14-day free trial today. No card needed.
+              Start your 14-day free trial today — up to 5 vehicles, no card needed.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="glow-cyan w-full">

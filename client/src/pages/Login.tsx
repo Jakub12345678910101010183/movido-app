@@ -276,7 +276,7 @@ export default function Login() {
             </Button>
             {mode === "register" && (
               <p className="text-xs text-muted-foreground text-center">
-                14-day free trial, no card needed. By creating an account you agree to the{" "}
+                14-day free trial for up to 5 vehicles, no card needed. By creating an account you agree to the{" "}
                 <Link href="/terms" className="text-primary hover:underline">Terms</Link> and confirm you have read the{" "}
                 <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
               </p>

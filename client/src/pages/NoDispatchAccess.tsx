@@ -98,7 +98,7 @@ function CreateOrganization() {
         <p className="font-semibold text-sm">Setting up MOViDO for your company?</p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Create your company to start a 14-day free trial — no card needed; choose a plan whenever you are ready.
+        Create your company to start a 14-day free trial for up to 5 vehicles — no card needed; choose a plan whenever you are ready.
         You will become its administrator. If you were invited as a driver, open the link in your invitation email instead.
       </p>
       <div className="space-y-1.5">

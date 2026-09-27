@@ -48,7 +48,7 @@ export default function Terms() {
 
       <Section title="4. Free trial, plans and payment">
         <ul>
-          <li>New companies get a 14-day free trial. No payment card is needed to start.</li>
+          <li>New companies get a 14-day free trial for up to 5 vehicles. No payment card is needed to start.</li>
           <li>
             Paid plans are charged per vehicle per month (or per year where offered) at the prices shown on the
             {" "}<Link href="/pricing" className="text-primary hover:underline">pricing page</Link> when you subscribe. Payments are

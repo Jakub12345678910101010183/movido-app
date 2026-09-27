@@ -492,7 +492,7 @@ export default function Home() {
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-4xl font-bold mb-4">Try MOViDO with your own fleet</h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Create your company account and run real jobs free for 14 days.
+              Create your company account and run real jobs free for 14 days with up to 5 vehicles.
             </p>
             <Button asChild size="lg" className="glow-cyan group">
                 <Link href="/login?mode=register">
