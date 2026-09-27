@@ -26,7 +26,8 @@ export function subscriptionState(org: { plan_status: string | null; trial_ends_
       return ms > 0 ? { kind: "trial", daysLeft: Math.ceil(ms / 86_400_000) } : { kind: "trial_ended" };
     }
     default:
-      // "cancelled" and any state the database does not grant access to.
+      // "cancelled", "unpaid" (Stripe stopped retrying) and any state the
+      // database does not grant access to.
       return { kind: "cancelled" };
   }
 }

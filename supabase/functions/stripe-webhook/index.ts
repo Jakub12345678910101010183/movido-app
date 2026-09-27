@@ -40,8 +40,9 @@ function planStatus(status: Stripe.Subscription.Status): string {
     case "trialing": return "trial";
     case "active": return "active";
     case "past_due":
-    case "unpaid":
     case "incomplete": return "past_due";
+    // Stripe has stopped retrying: restricted, like cancelled (my_org_has_access).
+    case "unpaid": return "unpaid";
     default: return "cancelled"; // canceled, incomplete_expired, paused
   }
 }
