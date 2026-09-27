@@ -16,9 +16,8 @@ Movido Driver App              → Expo (Android/iOS)
 1. Go to https://supabase.com/dashboard
 2. Open your project (or create one)
 3. Go to **SQL Editor**
-4. Run `supabase/migrations/001_initial_schema.sql` → creates all tables
-5. Run `supabase/migrations/002_tracking_token.sql` → adds tracking tokens
-6. Run `supabase/seed/001_sample_data.sql` → adds test fleet data
+4. Run `supabase/migrations/20260927000000_production_baseline.sql` → creates the full schema (new, empty project only)
+5. Run `supabase/seed/001_sample_data.sql` → adds test fleet data
 
 ### Create first user:
 1. Go to **Authentication > Users > Add user**

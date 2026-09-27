@@ -194,11 +194,23 @@ See the cleanup plan above. The two journey test accounts had their e-mail confi
 (data-only migrations `qa_confirm_journey_test_account`, `qa_confirm_journey_staff_account`) because no mailbox exists for
 `qa.movidologistics.uk`. Existing Movido Logistics Ltd data was not modified.
 
-## Database changes (all in `supabase/migrations/`, applied to production)
+## Database baseline
 
-010 app_settings per org · 011 private POD storage · 012 onboarding + org policies ·
-013 NOT NULL integrity · 014 driver workflow · 015 per-org uniqueness · 016 driver maintenance read ·
-017 driver positions · 018 server geofencing · 019 team management · 020 incidents/fuel/documents ·
-021 pre-launch safety (tracking privacy, guarded deletes) ·
-022 vehicle plan limit (consolidated from the five `phase_e1_vehicle_plan_limit*` production migrations).
-Edge Functions: `create-checkout-session` v12, `stripe-webhook` v6, `send-verification-email` retired (v3, 410).
+`supabase/migrations/20260927000000_production_baseline.sql` is the whole production schema, generated from
+the production catalog (tables, constraints, indexes, enums, sequences, all 26 functions with their
+SECURITY DEFINER / search_path settings, triggers including `on_auth_user_created`, RLS, 60 policies, grants,
+private storage buckets and their 6 policies, realtime publication). The old numbered files 001–022 did not
+match production (51 migrations were applied there directly) and are kept for history in
+`supabase/migrations_archive/`.
+
+Verified: applied to an empty Postgres with Supabase stand-ins → regenerating the DDL from it gives output
+identical to production's. Behavioural check on that fresh DB: signup + `create_organization` → admin, trial,
+5 vehicles; 6th vehicle blocked (MV409); self-raise of `max_vehicles` ignored; other tenant and anon see 0 rows.
+The file starts with a guard that aborts if `public.organizations` exists, so it can never alter production.
+
+Production migration history still lists the 51 old versions. Before using `supabase db push` against
+production, align it once (metadata only, no schema change):
+`supabase migration repair --status reverted <each old version>` then
+`supabase migration repair --status applied 20260927000000`.
+
+Edge Functions: `create-checkout-session` v12, `stripe-webhook` v10, `send-verification-email` retired (v3, 410).
