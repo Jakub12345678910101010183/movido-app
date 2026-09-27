@@ -236,20 +236,18 @@ exists in the project). Replace each `<Todo>…</Todo>` with the final text:
   be regenerated for the native app when the web key is split off.
 - **Supabase**: organisation plan verified Free. Leaked-password protection needs Pro; nothing else is pending.
 
-### Driver apps — status
-- **Native driver app (`movido-driver`, Expo)**: PARTIALLY BUILT — a June 2026 prototype (login, job list/detail, TomTom
-  navigate screen, POD camera + signature, messenger, WTD, truck check, foreground geofence). Not integrated with the current
-  backend: POD uploads to `pod/<job>_…` (storage policy requires `<org>/<job>/…`), truck checks write to a `truck_checks` table
-  that does not exist, no server GPS (`driver_report_location` not used), no multi-stop (`driver_update_stop` not used), no push
-  token registration, no background location task, no offline queue. Not production-ready; not tested.
-- **Web driver workspace (`/driver`)**: working and verified on production — sign-in, assigned jobs, start/deliver, stop
-  arrival/completion (RPC), live location while the screen is open (positions stored, geofence arrival once), POD photo +
-  signature, messages, Google Maps handoff, disabled-account block. Limits of a web page: no background GPS, no push
-  notifications, no offline mode.
-- **Before a native launch the app needs**: storage path and RPC alignment with the current backend; background location
-  (TaskManager) via `driver_report_location`; push notifications (token storage + server sender — neither exists yet);
-  multi-stop workflow via `driver_update_stop`; offline queue for status/POD; vehicle checks backed by a real table and
-  office view; incident/fuel reporting (not in the native app); invitation-based sign-in flow; store builds (EAS) and testing.
+### Driver apps — status (updated: native rebuild)
+- **Native MOViDO Driver (`movido-driver`, branch `claude/new-session-7ppjph`)**: rebuilt on Expo SDK 57 against the
+  current backend (migration `20260927192241_driver_app_backend`, applied). Covers sign-in, Home/Today, jobs,
+  multi-stop arrive/complete, TomTom truck ETA with Google/Apple Maps handoff, background GPS with an offline queue,
+  server geofencing, POD photo + signature, vehicle checks, incidents, fuel with receipt, office messaging, push
+  registration, and offline outbox with idempotent sync.
+  - Verified: 47 checks of the app's core code against production (QA accounts); TypeScript; iOS and Android Hermes
+    bundles; expo-doctor 21/21; 19 screens × 375/390/430 px layout/a11y; push pipeline DB → pg_net → Expo.
+  - **Not yet verified: real iPhone/Android devices** (EAS build needs the owner's Expo account: `eas init`, EAS
+    environment variables, Apple/Google accounts). Checklist in `movido-driver/README.md`.
+- **Web driver workspace (`/driver`)**: unchanged and still working (production regression passed after the migration).
+- **Office**: new *Vehicle checks* page; driver photos (incidents, checks, fuel receipts) open through signed URLs.
 
 ### Missing features (reported, not built)
 - CSV **import** (only CSV export exists; not advertised).
