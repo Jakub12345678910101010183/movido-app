@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && cp dist/public/index.html dist/public/404.html",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "format": "prettier --write ."

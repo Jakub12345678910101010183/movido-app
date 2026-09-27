@@ -55,7 +55,12 @@ export default function Terms() {
             processed by Stripe. Prices exclude VAT unless stated: <Todo>VAT treatment</Todo>.
           </li>
           <li>Subscriptions renew automatically until cancelled. <Todo>how to cancel, notice period, refunds</Todo>.</li>
-          <li>What happens when a trial ends without a subscription, or a payment fails: <Todo>access after trial / failed payment</Todo>.</li>
+          <li>
+            When a trial ends without a subscription, or a subscription is cancelled, you can still sign in, view and export
+            your data, but you cannot add new jobs, vehicles or drivers until you subscribe. Nothing is deleted. If a payment
+            fails, the Service keeps working while the payment is retried; if the subscription is then cancelled, the same
+            restrictions apply.
+          </li>
         </ul>
       </Section>
 

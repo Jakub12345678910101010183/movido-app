@@ -8,8 +8,12 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 export function Todo({ children }: { children: ReactNode }) {
+  // Visitors see a neutral marker; what the owner must supply stays in the
+  // source (see the owner checklist in MOViDO_PROGRESS.md).
   return (
-    <mark className="rounded bg-amber-500/15 px-1 text-amber-400">[OWNER TO CONFIRM: {children}]</mark>
+    <span className="italic text-muted-foreground" data-owner-todo={typeof children === "string" ? children : undefined}>
+      (to be confirmed)
+    </span>
   );
 }
 

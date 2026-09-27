@@ -1,7 +1,7 @@
 /**
  * One-line plan status for office users: days left in the trial, or what to
  * do when the trial has ended / a payment failed / the plan was cancelled.
- * Informational only — see lib/subscription.ts.
+ * The restriction itself is enforced in the database — see lib/subscription.ts.
  */
 
 import { useEffect, useState } from "react";
@@ -23,18 +23,19 @@ export default function PlanBanner() {
     return () => { cancelled = true; };
   }, [profile?.organization_id]);
 
-  if (!state || state.kind === "active" || (state.kind === "trial" && state.daysLeft === null)) return null;
+  if (!state || state.kind === "active") return null;
 
   const action = isAdmin
     ? <Link href="/pricing" className="font-medium text-primary hover:underline">View plans</Link>
     : <span>Ask your administrator to choose a plan.</span>;
 
+  const restricted = "Your data is safe and you can still view and export it, but new jobs, vehicles and drivers can't be added until a plan is chosen.";
   const warn = state.kind !== "trial";
   const text =
     state.kind === "trial" ? `Free trial: ${state.daysLeft} day${state.daysLeft === 1 ? "" : "s"} left (up to 5 vehicles). No card needed until you subscribe.`
-    : state.kind === "trial_ended" ? "Your free trial has ended. Choose a plan to subscribe."
-    : state.kind === "past_due" ? "Your last payment failed. Stripe emails your billing contact a link to pay; contact us if you need help."
-    : "Your subscription is cancelled. Choose a plan to subscribe again.";
+    : state.kind === "trial_ended" ? `Your free trial has ended. ${restricted}`
+    : state.kind === "past_due" ? "Your last payment failed. Everything keeps working while Stripe retries it; Stripe emails your billing contact a link to pay. Contact us if you need help."
+    : `Your subscription is not active. ${restricted}`;
 
   return (
     <div role="status" className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-4 py-2 text-xs ${warn ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-border bg-muted/30 text-muted-foreground"}`}>
