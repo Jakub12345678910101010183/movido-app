@@ -34,6 +34,7 @@ const plans = [
     name: "Starter",
     description: "Digital dispatch for small fleets",
     price: 19,
+    annualPrice: 190, // live Stripe annual price, per vehicle per year
     icon: Truck,
     stripePriceMonthly: import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY as string,
     stripePriceAnnual: import.meta.env.VITE_STRIPE_PRICE_STARTER_ANNUAL as string,
@@ -50,6 +51,7 @@ const plans = [
     name: "Professional",
     description: "Planning and reporting for growing operations",
     price: 35,
+    annualPrice: 350, // live Stripe annual price, per vehicle per year
     icon: Zap,
     popular: true,
     stripePriceMonthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY as string,
@@ -68,6 +70,7 @@ const plans = [
     name: "Enterprise",
     description: "For larger fleets with specific requirements",
     price: null,
+    annualPrice: null,
     icon: Building2,
     features: [
       "Everything in Professional, plus:",
@@ -79,16 +82,15 @@ const plans = [
   },
 ];
 
-// Annual plans are the monthly price less 20%, shown per vehicle per month.
-function annualMonthly(monthly: number): string {
-  const v = monthly * 0.8;
-  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+// Monthly equivalent of an annual price, for information only (billed yearly).
+function monthlyEquivalent(annual: number): string {
+  return (annual / 12).toFixed(2);
 }
 
 const faqs = [
   {
     question: "How is pricing calculated?",
-    answer: "Pricing is per vehicle per month. At checkout the quantity starts at the number of vehicles in your account, and you can adjust it."
+    answer: "Pricing is per vehicle, billed monthly or annually. At checkout the quantity starts at the number of vehicles in your account, and you can adjust it."
   },
   {
     question: "Can I change plans later?",
@@ -199,7 +201,7 @@ export default function Pricing() {
             </div>
             <h1 className="text-5xl font-bold mb-4">Simple, Transparent Pricing</h1>
             <p className="text-xl text-muted-foreground mb-8">
-              Per vehicle, per month. Start with a 14-day free trial.
+              Per vehicle, billed monthly or annually. Start with a 14-day free trial.
             </p>
             
             {/* Billing Toggle */}
@@ -237,13 +239,19 @@ export default function Pricing() {
                 <p className="text-sm text-muted-foreground mb-6">{plan.description}</p>
                 
                 <div className="mb-6">
-                  {plan.price ? (
+                  {plan.price && isAnnual && plan.annualPrice ? (
                     <>
-                      <span className="text-4xl font-bold font-mono text-cyan">£{isAnnual ? annualMonthly(plan.price) : plan.price}</span>
-                      <span className="text-muted-foreground">/ vehicle / month</span>
+                      <span className="text-4xl font-bold font-mono text-cyan">£{plan.annualPrice}</span>
+                      <span className="text-muted-foreground">/ vehicle / year</span>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {isAnnual ? `Billed annually · 20% off the monthly price` : 'Billed monthly'}
+                        £{plan.annualPrice} billed annually · £{monthlyEquivalent(plan.annualPrice)}/month equivalent
                       </p>
+                    </>
+                  ) : plan.price ? (
+                    <>
+                      <span className="text-4xl font-bold font-mono text-cyan">£{plan.price}</span>
+                      <span className="text-muted-foreground">/ vehicle / month</span>
+                      <p className="text-xs text-muted-foreground mt-1">Billed monthly</p>
                     </>
                   ) : (
                     <>
