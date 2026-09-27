@@ -199,5 +199,6 @@ See the cleanup plan above. The two journey test accounts had their e-mail confi
 010 app_settings per org · 011 private POD storage · 012 onboarding + org policies ·
 013 NOT NULL integrity · 014 driver workflow · 015 per-org uniqueness · 016 driver maintenance read ·
 017 driver positions · 018 server geofencing · 019 team management · 020 incidents/fuel/documents ·
-021 pre-launch safety (tracking privacy, guarded deletes).
+021 pre-launch safety (tracking privacy, guarded deletes) ·
+022 vehicle plan limit (consolidated from the five `phase_e1_vehicle_plan_limit*` production migrations).
 Edge Functions: `create-checkout-session` v12, `stripe-webhook` v6, `send-verification-email` retired (v3, 410).
