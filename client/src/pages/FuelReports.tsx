@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { DriverPhotoLink } from "@/components/DriverPhoto";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -300,6 +301,7 @@ export default function FuelReports() {
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
                               )}
+                              {log.receipt_path ? <DriverPhotoLink path={log.receipt_path} label="Receipt" /> : null}
                             </td>
                           </tr>
                         );

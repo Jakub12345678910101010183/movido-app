@@ -4,7 +4,7 @@
   "installCommand": "npm install --legacy-peer-deps",
   "framework": "vite",
   "rewrites": [
-    { "source": "/:page(dashboard|fleet|drivers|jobs|routes|pod|messenger|alerts|analytics|reports|settings|team|maintenance|incidents|fuel-reports|document-scanner|wtd|driver|login|pricing|privacy|terms|reset-password|accept-invitation)", "destination": "/index.html" },
+    { "source": "/:page(dashboard|fleet|drivers|jobs|routes|pod|messenger|alerts|analytics|reports|settings|team|maintenance|vehicle-checks|incidents|fuel-reports|document-scanner|wtd|driver|login|pricing|privacy|terms|reset-password|accept-invitation)", "destination": "/index.html" },
     { "source": "/auth/callback", "destination": "/index.html" },
     { "source": "/track/:token", "destination": "/index.html" }
   ],

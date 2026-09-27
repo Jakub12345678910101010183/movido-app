@@ -12,6 +12,7 @@ Disallow: /drivers
 Disallow: /routes
 Disallow: /messenger
 Disallow: /maintenance
+Disallow: /vehicle-checks
 Disallow: /pod
 Disallow: /alerts
 Disallow: /analytics

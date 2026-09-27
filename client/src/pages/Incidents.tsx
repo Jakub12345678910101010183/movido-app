@@ -26,6 +26,7 @@ import { LogIncidentDialog } from "@/components/RecordForms";
 import { useDrivers } from "@/hooks/useSupabaseData";
 import { useVehicles } from "@/hooks/useSupabaseData";
 import type { Incident } from "@/lib/database.types";
+import { DriverPhoto } from "@/components/DriverPhoto";
 
 // ============================================
 // Config
@@ -37,6 +38,11 @@ const incidentTypeConfig: Record<string, { label: string; color: string; icon: t
   vehicle_damage: { label: "Vehicle Damage",  color: "bg-amber-500/20 text-amber-400 border-amber-500/30",   icon: Truck },
   load_damage:    { label: "Load Damage",     color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", icon: Package },
   theft:          { label: "Theft",           color: "bg-purple-500/20 text-purple-400 border-purple-500/30", icon: Shield },
+  breakdown:      { label: "Breakdown",       color: "bg-red-500/20 text-red-400 border-red-500/30",          icon: Truck },
+  traffic_delay:  { label: "Traffic Delay",   color: "bg-amber-500/20 text-amber-400 border-amber-500/30",    icon: Clock },
+  customer_issue: { label: "Customer Issue",  color: "bg-blue-500/20 text-blue-400 border-blue-500/30",       icon: User },
+  delivery_issue: { label: "Delivery Issue",  color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", icon: Package },
+  road_closure:   { label: "Road Closure",    color: "bg-orange-500/20 text-orange-400 border-orange-500/30", icon: MapPin },
   other:          { label: "Other",           color: "bg-gray-500/20 text-gray-400 border-gray-500/30",       icon: AlertTriangle },
 };
 
@@ -460,10 +466,10 @@ export default function Incidents() {
                       <Camera className="w-3 h-3" /> Photos ({selectedIncident.photos.length})
                     </p>
                     <div className="grid grid-cols-2 gap-2">
-                      {selectedIncident.photos.map((url, i) => (
-                        <img
+                      {selectedIncident.photos.map((path, i) => (
+                        <DriverPhoto
                           key={i}
-                          src={url}
+                          path={path}
                           alt={`Incident photo ${i + 1}`}
                           className="w-full rounded-lg border border-border object-cover max-h-48"
                         />
