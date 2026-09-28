@@ -79,22 +79,33 @@ describe("driverActionMessage", () => {
 });
 
 describe("markStop", () => {
-  it("uses driver_mark_stop (server time), never driver_update_stop or a direct update", async () => {
+  it("uses driver_confirm_stop with the fix and server time, never the old stop functions or a direct update", async () => {
     const c = client([{ error: null }]);
-    expect((await markStop(c, 7, 0, "arrived", fast)).ok).toBe(true);
-    expect(c.calls).toEqual([{ fn: "driver_mark_stop", args: { p_job_id: 7, p_stop_index: 0, p_status: "arrived", p_at: null } }]);
+    expect((await markStop(c, 7, 0, "arrived", { lat: 51.5, lng: -0.1, accuracy: 12 }, fast)).ok).toBe(true);
+    expect(c.calls).toEqual([{ fn: "driver_confirm_stop", args: {
+      p_job_id: 7, p_stop_index: 0, p_status: "arrived", p_at: null, p_lat: 51.5, p_lng: -0.1, p_accuracy_m: 12 } }]);
+  });
+  it.each([
+    ["LOCATION_REQUIRED", "Your location is needed to confirm this stop. Turn on location and try again at the stop."],
+    ["LOCATION_INACCURATE", "Your location is not precise enough yet. Wait a moment in the open and try again."],
+    ["NOT_AT_STOP", "You are not at this stop yet. Try again when you arrive."],
+    ["STOP_NOT_LOCATED", "This stop has no map position. Ask the office to correct its address."],
+  ])("reports %s without retrying", async (code, message) => {
+    const c = client([{ error: { message: code, code: "MV409" } }]);
+    expect(await markStop(c, 7, 0, "arrived", null, fast)).toEqual({ ok: false, message });
+    expect(c.calls).toHaveLength(1);
   });
   it.each([
     ["STOP_ORDER", "Complete the previous stop first."],
     ["STOP_ALREADY_COMPLETED", "This stop is already delivered."],
   ])("reports %s without retrying", async (code, message) => {
     const c = client([{ error: { message: code, code: "MV409" } }]);
-    expect(await markStop(c, 7, 1, "completed", fast)).toEqual({ ok: false, message });
+    expect(await markStop(c, 7, 1, "completed", null, fast)).toEqual({ ok: false, message });
     expect(c.calls).toHaveLength(1);
   });
   it("retries a network failure", async () => {
     const c = client([{ error: { message: "Failed to fetch" } }, { error: null }]);
-    expect((await markStop(c, 7, 0, "completed", fast)).ok).toBe(true);
+    expect((await markStop(c, 7, 0, "completed", null, fast)).ok).toBe(true);
     expect(c.calls).toHaveLength(2);
   });
 });

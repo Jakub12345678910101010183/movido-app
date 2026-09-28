@@ -3,8 +3,9 @@
  *
  * Everything here runs as the signed-in driver and is enforced server-side:
  * RLS only returns jobs assigned to this driver, drivers cannot update jobs
- * directly, driver_mark_stop() marks stops in order (a delivered stop is
- * final), driver_complete_job() completes only when every stop is delivered
+ * directly, driver_confirm_stop() marks stops in order with the driver's
+ * position (a delivered stop is final), driver_complete_job() completes only
+ * when every stop is delivered
  * and with proof of delivery, and pod-photos storage policies only accept
  * uploads under "<organization_id>/<job_id>/" for the driver's own jobs.
  */
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
-import { completeDelivery, markStop as markDriverStop, nextStopIndex, startJob as startDriverJob, type RpcClient } from "@/lib/driverJobActions";
+import { completeDelivery, markStop as markDriverStop, nextStopIndex, startJob as startDriverJob, type Fix, type RpcClient } from "@/lib/driverJobActions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { Job } from "@/lib/database.types";
 import { useMessages } from "@/hooks/useSupabaseData";
@@ -82,6 +83,18 @@ function metresBetween(a: GeolocationCoordinates, b: GeolocationCoordinates): nu
   const h = Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
   return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/** One fresh position for a stop action, or null (no permission, no fix in 15 s). */
+function currentFix(): Promise<Fix | null> {
+  return new Promise((resolve) => {
+    if (!("geolocation" in navigator)) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    );
+  });
 }
 
 /**
@@ -400,7 +413,10 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
 
   const markStop = async (index: number, status: "arrived" | "completed") => {
     setBusy(`stop-${index}`);
-    const result = await markDriverStop(supabase as unknown as RpcClient, job.id, index, status);
+    // The server confirms the driver is at the stop. Without a fix it falls
+    // back to the recent shared location, and refuses if there is none.
+    const fix = await currentFix();
+    const result = await markDriverStop(supabase as unknown as RpcClient, job.id, index, status, fix);
     setBusy(null);
     if (!result.ok) {
       toast.error(result.message);
