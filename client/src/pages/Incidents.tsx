@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useIncidents, useJobs } from "@/hooks/useSupabaseData";
+import { incidentJobLabel, incidentVehicleLabel } from "@/lib/incidentLabels";
 import { LogIncidentDialog } from "@/components/RecordForms";
 import { useDrivers } from "@/hooks/useSupabaseData";
 import { useVehicles } from "@/hooks/useSupabaseData";
@@ -74,7 +75,6 @@ export default function Incidents() {
 
   // ---- Helpers ----
   const getDriverName = (id: number | null) => drivers.find((d) => d.id === id)?.name || "Unknown";
-  const getVehicleReg = (id: number | null) => vehicles.find((v) => v.id === id)?.registration || "Unknown";
   const getVehicleId = (id: number | null) => vehicles.find((v) => v.id === id)?.vehicle_id || "—";
 
   // ---- Filters ----
@@ -251,6 +251,7 @@ export default function Incidents() {
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Type</th>
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Driver</th>
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Vehicle</th>
+                  <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Job</th>
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Location</th>
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Status</th>
                   <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase">Flags</th>
@@ -289,6 +290,9 @@ export default function Incidents() {
                       </td>
                       <td className="p-4">
                         <span className="text-sm font-mono text-muted-foreground">{getVehicleId(inc.vehicle_id)}</span>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-sm font-mono text-muted-foreground">{inc.job_id != null ? incidentJobLabel(inc.job_id, jobs).text : "—"}</span>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -402,9 +406,16 @@ export default function Incidents() {
                     <div className="flex items-center gap-1.5">
                       <Truck className="w-3 h-3" />
                       <span className="text-sm font-medium">
-                        {getVehicleId(selectedIncident.vehicle_id)} — {getVehicleReg(selectedIncident.vehicle_id)}
+                        {incidentVehicleLabel(selectedIncident.vehicle_id, vehicles)}
                       </span>
                     </div>
+                  </div>
+                  <div className="bg-muted/20 rounded-lg p-3 col-span-2">
+                    <p className="text-xs text-muted-foreground mb-1">Job</p>
+                    {(() => {
+                      const job = incidentJobLabel(selectedIncident.job_id, jobs);
+                      return <span className={`text-sm ${job.linked ? "font-mono font-medium" : "text-muted-foreground"}`}>{job.text}</span>;
+                    })()}
                   </div>
                   <div className="bg-muted/20 rounded-lg p-3 col-span-2">
                     <p className="text-xs text-muted-foreground mb-1">Location</p>
