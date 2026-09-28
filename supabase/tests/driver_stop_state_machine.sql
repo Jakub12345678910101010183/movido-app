@@ -155,10 +155,10 @@ insert into sm_result select 'L: admin/anon calls changed nothing', stops -> 0 -
 insert into sm_result select 'M: completed job row unchanged', md5(row(j.*)::text) = (select h from before_m), '' from public.jobs j where id = 670004;
 
 -- Geofence arrival respects the order.
-select public.evaluate_geofences(670001, '00000000-0000-4000-a000-0000000000e1', 51.60, -0.20);
+select public.evaluate_geofences(670001, '00000000-0000-4000-a000-0000000000e1', 51.60, -0.20, 10, now());
 insert into sm_result select 'geofence at stop 2 while stop 1 pending: no auto-arrival',
   pg_temp.stop_status(670005, 1) = 'pending', pg_temp.stop_status(670005, 1);
-select public.evaluate_geofences(670001, '00000000-0000-4000-a000-0000000000e1', 51.50, -0.10);
+select public.evaluate_geofences(670001, '00000000-0000-4000-a000-0000000000e1', 51.50, -0.10, 10, now());
 insert into sm_result select 'geofence at stop 1 (next stop): auto-arrival',
   pg_temp.stop_status(670005, 0) = 'arrived', pg_temp.stop_status(670005, 0);
 
