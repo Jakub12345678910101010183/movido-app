@@ -4,7 +4,8 @@
  * MIGRATED: tRPC → useJobs() Supabase hook
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearch } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -100,7 +101,11 @@ const defaultForm: JobFormData = {
 };
 
 export default function Jobs() {
-  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
+  // The header search navigates to /jobs?q=… — follow the query string so it
+  // also filters when this page is already open (no remount happens then).
+  const search = useSearch();
+  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(search).get("q") ?? "");
+  useEffect(() => { setSearchTerm(new URLSearchParams(search).get("q") ?? ""); }, [search]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -117,7 +122,7 @@ export default function Jobs() {
   const { drivers } = useDrivers();
 
   const filteredJobs = jobs.filter((job) => {
-    const s = searchTerm.toLowerCase();
+    const s = searchTerm.trim().toLowerCase();
     const matchesSearch = job.reference.toLowerCase().includes(s) || job.customer.toLowerCase().includes(s) || (job.pickup_address?.toLowerCase() || "").includes(s) || (job.delivery_address?.toLowerCase() || "").includes(s);
     return matchesSearch && (statusFilter === "all" || job.status === statusFilter);
   });
