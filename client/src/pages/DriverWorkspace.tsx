@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
+import { completeDelivery, startJob as startDriverJob, type RpcClient } from "@/lib/driverJobActions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { Job } from "@/lib/database.types";
 import { useMessages } from "@/hooks/useSupabaseData";
@@ -381,10 +382,9 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
 
   const startJob = async () => {
     setBusy("start");
-    const { error } = await withRetry(() =>
-      supabase.from("jobs").update({ status: "in_progress" }).eq("id", job.id));
+    const result = await startDriverJob(supabase as unknown as RpcClient, job.id);
     setBusy(null);
-    if (error) toast.error("Could not start the job");
+    if (!result.ok) toast.error(result.message);
     else {
       onPatch({ status: "in_progress" });
       onStarted();
@@ -574,20 +574,12 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
         }
       }
       const signature = hasSignature ? canvasRef.current?.toDataURL("image/png") ?? null : null;
-      const podNotes = [recipient.trim() && `Received by: ${recipient.trim()}`, notes.trim()]
-        .filter(Boolean)
-        .join("\n");
-      const { error } = await withRetry(() => supabase
-        .from("jobs")
-        .update({
-          status: "completed",
-          pod_status: photoPath ? "photo" : "signed",
-          pod_photo_url: photoPath,
-          pod_signature: signature,
-          pod_notes: podNotes || null,
-        })
-        .eq("id", job.id));
-      if (error) throw new Error(error.message);
+      // The server stores "Received by: <recipient>" + notes, checks the photo
+      // belongs to this job and completes the job.
+      const result = await completeDelivery(supabase as unknown as RpcClient, {
+        jobId: job.id, photoPath, signature, recipient, notes, capturedAt: new Date().toISOString(),
+      });
+      if (!result.ok) throw new Error(result.message);
       toast.success("Delivery completed");
       await onDone();
     } catch (err) {
