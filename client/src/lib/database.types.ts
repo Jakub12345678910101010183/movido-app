@@ -241,6 +241,7 @@ type VehicleRow = {
   current_location: string | null;
   location_lat: number | null;
   location_lng: number | null;
+  location_updated_at: string | null;
   fuel_level: number | null;
   mileage: number | null;
   next_service_date: string | null;

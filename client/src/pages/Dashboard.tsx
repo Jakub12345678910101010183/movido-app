@@ -23,16 +23,9 @@ import { CLEAN_AIR_ZONES, CAZ_CHECK_URL } from "@/lib/cleanAirZones";
 import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
+import { liveVehicles, positionAge } from "@/lib/livePosition";
 
 const milesToKm = (miles: number) => miles * 1.60934;
-
-function positionAge(iso: string | null): string {
-  if (!iso) return "time unknown";
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  return `${Math.round(mins / 60)} h ago`;
-}
 
 export default function Dashboard() {
   const [useMiles, setUseMiles] = useState(() => {
@@ -92,16 +85,14 @@ export default function Dashboard() {
       }
     });
 
-    // Fallback: vehicles with stored locations
+    // Fallback: vehicles with a recent stored position (same 12 h rule as drivers)
     if (liveDrivers.length === 0) {
-      vehicles.forEach((v) => {
-        if (v.location_lat && v.location_lng) {
-          markers.push({
-            id: `vehicle-${v.id}`, lat: v.location_lat, lng: v.location_lng,
-            label: v.vehicle_id, type: "vehicle", status: v.status,
-            popup: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}<br/>Fuel: ${v.fuel_level ?? "—"}%`,
-          });
-        }
+      liveVehicles(vehicles).forEach((v) => {
+        markers.push({
+          id: `vehicle-${v.id}`, lat: v.location_lat!, lng: v.location_lng!,
+          label: v.vehicle_id, type: "vehicle", status: v.status,
+          popup: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}<br/>Fuel: ${v.fuel_level ?? "—"}%<br/>Updated ${positionAge(v.location_updated_at)}`,
+        });
       });
     }
 

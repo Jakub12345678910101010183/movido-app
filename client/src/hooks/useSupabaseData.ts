@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { LIVE_POSITION_MAX_AGE_MS } from "@/lib/livePosition";
 import type {
   Database,
   Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog, Message,
@@ -177,7 +178,7 @@ export function useRealtimeDriverLocations() {
     let active = true;
     // Positions reported in the last 12 hours (RLS scopes this to the org).
     const fetchDrivers = async () => {
-      const since = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const since = new Date(Date.now() - LIVE_POSITION_MAX_AGE_MS).toISOString();
       const { data, error } = await supabase
         .from("drivers")
         .select("*")

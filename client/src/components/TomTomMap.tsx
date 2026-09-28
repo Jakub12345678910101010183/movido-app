@@ -416,7 +416,10 @@ export function TomTomMap({
 
   return (
     <div className={cn("relative w-full h-[500px]", className)} style={style}>
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* Inline, not a class: the SDK stylesheet (loaded later) sets
+          .mapboxgl-map { position: relative }, which beat `absolute inset-0`
+          and collapsed the map to 0 px high. */}
+      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
       {status === "failed" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/90 text-center p-4">
           <p className="text-sm text-muted-foreground">
