@@ -2,9 +2,10 @@
  * Driver workspace — the mobile screen a driver uses on the road.
  *
  * Everything here runs as the signed-in driver and is enforced server-side:
- * RLS only returns jobs assigned to this driver, jobs_driver_field_guard lets
- * a driver change nothing but progress and POD fields, driver_update_stop()
- * is the only way to mark a stop, and pod-photos storage policies only accept
+ * RLS only returns jobs assigned to this driver, drivers cannot update jobs
+ * directly, driver_mark_stop() marks stops in order (a delivered stop is
+ * final), driver_complete_job() completes only when every stop is delivered
+ * and with proof of delivery, and pod-photos storage policies only accept
  * uploads under "<organization_id>/<job_id>/" for the driver's own jobs.
  */
 
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
-import { completeDelivery, startJob as startDriverJob, type RpcClient } from "@/lib/driverJobActions";
+import { completeDelivery, markStop as markDriverStop, nextStopIndex, startJob as startDriverJob, type RpcClient } from "@/lib/driverJobActions";
 import { useAuthContext } from "@/contexts/AuthContext";
 import type { Job } from "@/lib/database.types";
 import { useMessages } from "@/hooks/useSupabaseData";
@@ -393,16 +394,20 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
     }
   };
 
+  // Stops are done in order; the server enforces it, the UI only offers the next one.
+  const nextStop = nextStopIndex(stops);
+  const allStopsDone = nextStop === null;
+
   const markStop = async (index: number, status: "arrived" | "completed") => {
     setBusy(`stop-${index}`);
-    const { data, error } = await withRetry(() => supabase.rpc("driver_update_stop", {
-      p_job_id: job.id, p_stop_index: index, p_status: status,
-    }));
+    const result = await markDriverStop(supabase as unknown as RpcClient, job.id, index, status);
     setBusy(null);
-    if (error) toast.error("Could not update the stop");
-    else {
+    if (!result.ok) {
+      toast.error(result.message);
+      await onChanged(); // show the stops as the server has them
+    } else {
       // The RPC returns the saved stops: show them even if the refresh fails.
-      onPatch({ stops: data, status: job.status === "in_progress" ? job.status : "in_progress" });
+      onPatch({ stops: result.stops as Job["stops"], status: job.status === "in_progress" ? job.status : "in_progress" });
       toast.success(status === "arrived" ? "Arrival recorded" : "Stop delivered");
       await onChanged();
     }
@@ -433,7 +438,8 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
               </a>
             </Button>
             {job.status === "in_progress" ? (
-              <Button onClick={() => setShowPod(true)}><Flag className="w-4 h-4 mr-2" />Complete</Button>
+              <Button onClick={() => setShowPod(true)} disabled={!allStopsDone}
+                title={allStopsDone ? undefined : "Deliver every stop first"}><Flag className="w-4 h-4 mr-2" />Complete</Button>
             ) : (
               <Button onClick={startJob} disabled={busy !== null}>
                 {busy === "start" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Start job
@@ -462,7 +468,7 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
                 <p className="text-sm break-words">{stop.address}</p>
               </div>
             </div>
-            {!closed && stop.status !== "completed" && (
+            {!closed && i === nextStop && (
               <div className="flex gap-2 pl-8">
                 {stop.status === "pending" && (
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => markStop(i, "arrived")}>
@@ -482,7 +488,7 @@ function JobDetail({ job, onChanged, onPatch, onStarted }: {
         </li>
       </ol>
 
-      {showPod && !closed && (
+      {showPod && !closed && allStopsDone && (
         <PodCapture job={job} onDone={async () => { setShowPod(false); await onChanged(); }} onCancel={() => setShowPod(false)} />
       )}
       {job.status === "completed" && (

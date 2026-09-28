@@ -1,9 +1,9 @@
 /**
  * Driver job actions for the web Driver workspace. Drivers never update the
- * jobs row directly: starting and completing go through the same checked
- * database functions the native app uses (driver_start_job,
- * driver_complete_job), which verify the driver, the organisation and the
- * proof of delivery.
+ * jobs row directly: starting, stops and completing go through the same checked
+ * database functions the native app uses (driver_start_job, driver_mark_stop,
+ * driver_complete_job), which verify the driver, the organisation, the stop
+ * order and the proof of delivery.
  */
 type RpcError = { message: string; code?: string } | null;
 export type RpcClient = { rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: RpcError }> };
@@ -18,6 +18,11 @@ const MESSAGES: Record<string, string> = {
   JOB_CLOSED: "This job is closed and cannot be changed.",
   JOB_NOT_FOUND: "This job is no longer assigned to you.",
   NOT_A_DRIVER: "Only drivers can do this.",
+  STOP_ORDER: "Complete the previous stop first.",
+  STOP_ALREADY_COMPLETED: "This stop is already delivered.",
+  STOPS_PENDING: "Deliver every stop before completing the job.",
+  STOP_NOT_FOUND: "This stop no longer exists on the job.",
+  INVALID_STATUS: "That action is not possible for this stop.",
 };
 
 export function driverActionMessage(error: RpcError, fallback: string): string {
@@ -44,6 +49,23 @@ export type ActionResult = { ok: true } | { ok: false; message: string };
 export async function startJob(client: RpcClient, jobId: number, opts = { attempts: 4, delayMs: 1000 }): Promise<ActionResult> {
   const { error } = await call(client, "driver_start_job", { p_job_id: jobId }, opts.attempts, opts.delayMs);
   return error ? { ok: false, message: driverActionMessage(error, "Could not start the job") } : { ok: true };
+}
+
+export type StopResult = { ok: true; stops: unknown } | { ok: false; message: string };
+
+/** Stops move in order: the server refuses a stop before the previous one is delivered. */
+export async function markStop(client: RpcClient, jobId: number, stopIndex: number, status: "arrived" | "completed",
+  opts = { attempts: 4, delayMs: 1000 }): Promise<StopResult> {
+  const { data, error } = await call(client, "driver_mark_stop", {
+    p_job_id: jobId, p_stop_index: stopIndex, p_status: status, p_at: null,
+  }, opts.attempts, opts.delayMs);
+  return error ? { ok: false, message: driverActionMessage(error, "Could not update the stop") } : { ok: true, stops: data };
+}
+
+/** Index of the stop the driver can act on now (first not delivered), or null when all are delivered. */
+export function nextStopIndex(stops: { status?: string }[]): number | null {
+  const i = stops.findIndex((s) => s.status !== "completed");
+  return i === -1 ? null : i;
 }
 
 export type DeliveryInput = {
