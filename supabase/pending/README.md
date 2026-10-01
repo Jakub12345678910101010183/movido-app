@@ -35,3 +35,11 @@ Nothing in this folder is a migration yet. `supabase db push` only reads
 
 Until Stage 2, stop actions are recorded with their location result but not
 refused; the old entry points keep today's behaviour.
+
+# Pending: F1 geofence next-stop arrival
+
+| File | Purpose |
+|---|---|
+| `20261001120000_geofence_next_stop_arrival.sql` | `evaluate_geofences` only: a stop reached before the previous one was delivered arrives on the next fresh qualifying point once it is next (point time >= previous delivery), with location evidence |
+| `20261001120500_geofence_next_stop_arrival_rollback.sql` | Restores the production `evaluate_geofences` (hash `1edabe6e`) |
+| `geofence_next_stop_arrival_test.sql` | F1 tests (27) |
