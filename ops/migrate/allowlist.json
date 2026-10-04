@@ -1,0 +1,13 @@
+{
+  "source_commit": "0a9b53a422d202e9eedb4fcb6dedd6e543b63e99",
+  "files": {
+    "20261004120000_office_job_guard.sql": {
+      "path": "supabase/pending/20261004120000_office_job_guard.sql",
+      "sha256": "29f2c5524a835136606df9fbb7c10a0446e7ec22b91df6ad5fc15a12b9b52f9b"
+    },
+    "20261004120500_office_job_guard_rollback.sql": {
+      "path": "supabase/pending/20261004120500_office_job_guard_rollback.sql",
+      "sha256": "98887626f47a6d8e72262dcbb695cd816fa8f65545a620e65ad988128895cb5e"
+    }
+  }
+}
