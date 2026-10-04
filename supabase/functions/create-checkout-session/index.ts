@@ -9,11 +9,16 @@
 // Pricing is per vehicle, so the quantity starts at the organisation's
 // current vehicle count and the customer can adjust it at checkout.
 //
+// The flow is in checkout.ts: Checkout is refused (409 ALREADY_SUBSCRIBED)
+// while the organisation has a subscription that is not finished, and both
+// the customer and the session are created with idempotency keys.
+//
 // Secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
 //          STRIPE_SECRET_KEY, STRIPE_PRICE_{STARTER,PRO}_{MONTHLY,ANNUAL}
 
 import Stripe from "https://esm.sh/stripe@14.0.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { startCheckout } from "./checkout.ts";
 
 const SITE_URL = "https://www.movidologistics.uk";
 const ALLOWED_ORIGINS = [SITE_URL, "https://movidologistics.uk"];
@@ -79,90 +84,24 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json(req, 400, { error: "INVALID_BODY" });
   }
-  if (typeof priceId !== "string" || !allowedPrices.has(priceId)) {
-    return json(req, 400, { error: "INVALID_PRICE" });
-  }
-
   const admin = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: profile } = await admin
-    .from("users")
-    .select("role, organization_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!profile?.organization_id || profile.role !== "admin") {
-    return json(req, 403, { error: "ADMIN_ONLY" });
-  }
-  const orgId: string = profile.organization_id;
-
-  const { data: org } = await admin
-    .from("organizations")
-    .select("id, name, email, stripe_customer_id")
-    .eq("id", orgId)
-    .single();
-  if (!org) return json(req, 404, { error: "ORGANIZATION_NOT_FOUND" });
-
-  const { count: vehicleCount } = await admin
-    .from("vehicles")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId);
-
   const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 
-  // The price must exist (and be active) in the mode of this secret key. A
-  // live price with a test key — or the reverse — fails here, before any
-  // customer is created.
-  try {
-    const price = await stripe.prices.retrieve(priceId);
-    if (!price.active) return json(req, 409, { error: "PRICE_INACTIVE" });
-  } catch (err) {
-    console.error("price_unavailable", err instanceof Error ? err.message : "unknown");
-    return json(req, 502, { error: "PRICE_UNAVAILABLE" });
-  }
-
-  try {
-    let customerId: string | null = org.stripe_customer_id;
-    // A customer id stored under the other Stripe mode (or deleted) is useless.
-    if (customerId) {
-      try {
-        const existing = await stripe.customers.retrieve(customerId);
-        if ((existing as { deleted?: boolean }).deleted) customerId = null;
-      } catch {
-        customerId = null;
-      }
-    }
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        name: org.name,
-        email: org.email ?? user.email ?? undefined,
-        metadata: { organization_id: orgId },
-      });
-      customerId = customer.id;
-      await admin.from("organizations").update({ stripe_customer_id: customerId }).eq("id", orgId);
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: orgId,
-      metadata: { organization_id: orgId },
-      subscription_data: { metadata: { organization_id: orgId } },
-      line_items: [{
-        price: priceId,
-        quantity: Math.max(1, vehicleCount ?? 0),
-        adjustable_quantity: { enabled: true, minimum: 1, maximum: 500 },
-      }],
-      success_url: `${SITE_URL}/settings?checkout=success`,
-      cancel_url: `${SITE_URL}/pricing?checkout=cancelled`,
-      allow_promotion_codes: true,
-      billing_address_collection: "required",
-      tax_id_collection: { enabled: true },
-      customer_update: { name: "auto", address: "auto" },
-    });
-    return json(req, 200, { url: session.url });
-  } catch (err) {
-    console.error("checkout_failed", err instanceof Error ? err.message : "unknown");
-    return json(req, 502, { error: "CHECKOUT_FAILED" });
-  }
+  const result = await startCheckout({
+    db: admin,
+    stripe: {
+      retrievePrice: (id) => stripe.prices.retrieve(id),
+      retrieveCustomer: async (id) => (await stripe.customers.retrieve(id)) as { deleted?: boolean },
+      createCustomer: (params, idempotencyKey) => stripe.customers.create(params as Stripe.CustomerCreateParams, { idempotencyKey }),
+      listSubscriptions: (customer) => stripe.subscriptions.list({ customer, status: "all", limit: 100 }),
+      createSession: (params, idempotencyKey) => stripe.checkout.sessions.create(params as Stripe.Checkout.SessionCreateParams, { idempotencyKey }),
+    },
+    allowedPrices,
+    siteUrl: SITE_URL,
+    now: () => new Date(),
+    log: (...args) => console.error(...args),
+  }, user, priceId);
+  return json(req, result.status, result.body);
 });

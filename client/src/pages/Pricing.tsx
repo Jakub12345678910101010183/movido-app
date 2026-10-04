@@ -149,7 +149,9 @@ export default function Pricing() {
         toast.error(
           code === "ADMIN_ONLY"
             ? "Only your company's administrator can start a subscription."
-            : code === "BILLING_NOT_CONFIGURED" || code === "PRICE_UNAVAILABLE" || code === "PRICE_INACTIVE"
+            : code === "ALREADY_SUBSCRIBED"
+            ? "Your company already has a subscription. To change your plan, please contact support."
+            : code === "BILLING_NOT_CONFIGURED" || code === "BILLING_UNAVAILABLE" || code === "PRICE_UNAVAILABLE" || code === "PRICE_INACTIVE"
               ? "Online checkout is temporarily unavailable — please contact sales."
               : "Checkout could not be started. Please try again.",
         );
