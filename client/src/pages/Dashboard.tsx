@@ -23,7 +23,8 @@ import { CLEAN_AIR_ZONES, CAZ_CHECK_URL } from "@/lib/cleanAirZones";
 import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
-import { liveVehicles, positionAge } from "@/lib/livePosition";
+import { liveVehicles, positionMarker } from "@/lib/livePosition";
+import { completedToday, vehiclesOnActiveJobs } from "@/lib/metrics";
 
 const milesToKm = (miles: number) => miles * 1.60934;
 
@@ -77,22 +78,24 @@ export default function Dashboard() {
     liveDrivers.forEach((driver) => {
       if (driver.location_lat && driver.location_lng) {
         const vehicle = vehicles.find((v) => v.driver_id === driver.id);
-        markers.push({
+        markers.push(positionMarker({
           id: `driver-${driver.id}`, lat: driver.location_lat, lng: driver.location_lng,
-          label: vehicle?.vehicle_id || driver.name, type: "vehicle", status: driver.status,
-          popup: `<strong>${escapeHtml(driver.name)}</strong><br/>${vehicle ? `Vehicle: ${escapeHtml(vehicle.vehicle_id)}<br/>` : ""}Status: ${driver.status}<br/>Updated ${positionAge(driver.location_updated_at)}`,
-        });
+          label: vehicle?.vehicle_id || driver.name, status: driver.status,
+          popupHtml: `<strong>${escapeHtml(driver.name)}</strong><br/>${vehicle ? `Vehicle: ${escapeHtml(vehicle.vehicle_id)}<br/>` : ""}Status: ${escapeHtml(driver.status)}`,
+          reportedAt: driver.location_updated_at,
+        }));
       }
     });
 
     // Fallback: vehicles with a recent stored position (same 12 h rule as drivers)
     if (liveDrivers.length === 0) {
       liveVehicles(vehicles).forEach((v) => {
-        markers.push({
+        markers.push(positionMarker({
           id: `vehicle-${v.id}`, lat: v.location_lat!, lng: v.location_lng!,
-          label: v.vehicle_id, type: "vehicle", status: v.status,
-          popup: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}<br/>Fuel: ${v.fuel_level ?? "—"}%<br/>Updated ${positionAge(v.location_updated_at)}`,
-        });
+          label: v.vehicle_id, status: v.status,
+          popupHtml: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}`,
+          reportedAt: v.location_updated_at,
+        }));
       });
     }
 
@@ -107,15 +110,12 @@ export default function Dashboard() {
   }, [liveDrivers, vehicles, showCAZLayers]);
 
   // Stats
-  const activeVehicleCount = vehicles.filter((v) => v.status === "active").length;
-  const activeJobCount = jobs.filter((j) => j.status === "in_progress" || j.status === "assigned").length;
+  // Measured from jobs: vehicles.status and fuel_level are set by hand.
+  const activeVehicleCount = vehiclesOnActiveJobs(jobs);
+  const inProgressJobCount = jobs.filter((j) => j.status === "in_progress").length;
+  const assignedJobCount = jobs.filter((j) => j.status === "assigned").length;
   const pendingJobCount = jobs.filter((j) => j.status === "pending").length;
-  const completedTodayCount = jobs.filter((j) => {
-    if (j.status !== "completed") return false;
-    const ts = j.completed_at || j.updated_at;
-    if (!ts) return false;
-    return new Date(ts).toDateString() === new Date().toDateString();
-  }).length;
+  const completedTodayCount = jobs.filter((j) => completedToday(j)).length;
   // Open jobs with an ETA, soonest first; "late" = ETA passed and not delivered.
   const upcomingEtas = jobs
     .filter((j) => j.eta && j.status !== "completed" && j.status !== "cancelled")
@@ -150,7 +150,7 @@ export default function Dashboard() {
         <Link href="/wtd">
           <div className="bg-red-500/15 border-b border-red-500/30 px-4 py-2 flex items-center gap-3 cursor-pointer hover:bg-red-500/20 transition-colors">
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <span className="text-sm text-red-300 font-medium">WTD Violation: {wtdAlerts.violations[0]}{wtdAlerts.violations.length > 1 ? ` (+${wtdAlerts.violations.length - 1} more)` : ""}</span>
+            <span className="text-sm text-red-300 font-medium">WTD (recorded hours): {wtdAlerts.violations[0]}{wtdAlerts.violations.length > 1 ? ` (+${wtdAlerts.violations.length - 1} more)` : ""}</span>
             <span className="ml-auto text-xs text-red-400 underline">View WTD →</span>
           </div>
         </Link>
@@ -159,7 +159,7 @@ export default function Dashboard() {
         <Link href="/wtd">
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center gap-3 cursor-pointer hover:bg-amber-500/15 transition-colors">
             <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <span className="text-sm text-amber-300">{wtdAlerts.warnings[0]}{wtdAlerts.warnings.length > 1 ? ` (+${wtdAlerts.warnings.length - 1} more drivers)` : ""}</span>
+            <span className="text-sm text-amber-300">Recorded hours: {wtdAlerts.warnings[0]}{wtdAlerts.warnings.length > 1 ? ` (+${wtdAlerts.warnings.length - 1} more drivers)` : ""}</span>
             <span className="ml-auto text-xs text-amber-400 underline">View WTD →</span>
           </div>
         </Link>
@@ -186,6 +186,7 @@ export default function Dashboard() {
             <h3 className="font-semibold text-sm">Active Fleet</h3>
             <span className="text-xs text-muted-foreground font-mono">{vehiclesLoading ? "..." : `${vehicles.length} vehicles`}</span>
           </div>
+          <p className="text-xs text-muted-foreground -mt-2 mb-3" data-testid="fleet-recorded-note">Status and fuel are entered on the vehicle record, not live telemetry.</p>
           {vehiclesLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 rounded-lg bg-muted/20 animate-pulse" />)}</div>
           ) : vehicles.length === 0 ? (
@@ -196,7 +197,7 @@ export default function Dashboard() {
                 <div key={vehicle.id} className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedVehicle === `vehicle-${vehicle.id}` ? "border-primary/50 bg-primary/5" : "border-border bg-card/50 hover:border-primary/30"}`} onClick={() => setSelectedVehicle(`vehicle-${vehicle.id}`)}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-sm">{vehicle.vehicle_id}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${vehicle.status === "active" ? "bg-green-500/20 text-green-500" : vehicle.status === "maintenance" ? "bg-amber-500/20 text-amber-500" : vehicle.status === "offline" ? "bg-red-500/20 text-red-500" : "bg-muted text-muted-foreground"}`}>{vehicle.status}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${vehicle.status === "active" ? "bg-green-500/20 text-green-500" : vehicle.status === "maintenance" ? "bg-amber-500/20 text-amber-500" : vehicle.status === "offline" ? "bg-red-500/20 text-red-500" : "bg-muted text-muted-foreground"}`} title="Set manually on the vehicle record">{vehicle.status} (manual)</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="font-mono">{vehicle.type.toUpperCase()}</span>
@@ -207,7 +208,7 @@ export default function Dashboard() {
                     <div className="mt-2 flex items-center gap-2">
                       <Fuel className="w-3 h-3 text-muted-foreground" />
                       <div className="flex-1 h-1.5 bg-muted rounded-full"><div className={`h-full rounded-full ${vehicle.fuel_level > 50 ? "bg-green-500" : vehicle.fuel_level > 20 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${vehicle.fuel_level}%` }} /></div>
-                      <span className="text-xs font-mono">{vehicle.fuel_level}%</span>
+                      <span className="text-xs font-mono" title="Entered on the vehicle record, not measured">{vehicle.fuel_level}% recorded</span>
                     </div>
                   )}
                 </div>
@@ -220,7 +221,7 @@ export default function Dashboard() {
         <div className="border-t border-border p-4 max-h-[40vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-sm">Active Jobs</h3>
-            <span className="text-xs text-muted-foreground font-mono">{jobsLoading ? "..." : `${activeJobCount + pendingJobCount} active`}</span>
+            <span className="text-xs text-muted-foreground font-mono">{jobsLoading ? "..." : `${inProgressJobCount + assignedJobCount + pendingJobCount} open`}</span>
           </div>
           {jobsLoading ? (
             <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-16 rounded-lg bg-muted/20 animate-pulse" />)}</div>
@@ -266,7 +267,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <h1 className="font-semibold">Dispatch Center</h1>
             <span className="text-xs text-muted-foreground font-mono">{currentTime}</span>
-            {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-amber-500" title="Instant updates unavailable; positions refresh every 20 seconds"><WifiOff className="w-3 h-3" /> Refreshing every 20 s</span>}
+            {realtimeConnected ? <span className="flex items-center gap-1 text-xs text-green-500"><Wifi className="w-3 h-3" /> Live</span> : <span className="flex items-center gap-1 text-xs text-amber-500" title="Instant updates unavailable; positions refresh every 20 seconds and lists every 30 seconds"><WifiOff className="w-3 h-3" /> Refreshing every 20–30 s</span>}
           </div>
           <div className="flex flex-wrap items-center gap-1 md:gap-2">
             <Button variant="ghost" size="sm" className={mapStyle === "night" ? "text-primary" : ""} onClick={() => setMapStyle("night")}><MapIcon className="w-4 h-4 mr-1" />Dark</Button>
@@ -293,7 +294,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{vehicleMatch?.status || driverMatch?.status}</p></div>
                   {driverMatch && <div><p className="text-xs text-muted-foreground">Driver</p><p className="font-medium">{driverMatch.name}</p></div>}
-                  {vehicleMatch && <><div><p className="text-xs text-muted-foreground">Type</p><p className="font-mono">{vehicleMatch.type.toUpperCase()}</p></div><div><p className="text-xs text-muted-foreground">Fuel</p><p className="font-mono">{vehicleMatch.fuel_level}%</p></div></>}
+                  {vehicleMatch && <><div><p className="text-xs text-muted-foreground">Type</p><p className="font-mono">{vehicleMatch.type.toUpperCase()}</p></div><div><p className="text-xs text-muted-foreground">Fuel (recorded)</p><p className="font-mono">{vehicleMatch.fuel_level}%</p></div></>}
                   {driverMatch?.location_lat && <><div><p className="text-xs text-muted-foreground">Lat</p><p className="font-mono text-xs">{driverMatch.location_lat.toFixed(4)}°N</p></div><div><p className="text-xs text-muted-foreground">Lng</p><p className="font-mono text-xs">{Math.abs(driverMatch.location_lng ?? 0).toFixed(4)}°{(driverMatch.location_lng ?? 0) < 0 ? "W" : "E"}</p></div></>}
                 </div>
               </div>
@@ -315,9 +316,9 @@ export default function Dashboard() {
       <aside className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-border bg-card/50 p-4 flex flex-col">
         <h3 className="font-semibold text-sm mb-4">Fleet Statistics</h3>
         <div className="space-y-4 flex-1">
-          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Truck className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Active Vehicles</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeVehicleCount}/{vehicles.length}</p></div>
-          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Navigation className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Jobs In Progress</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeJobCount}</p><p className="text-xs text-muted-foreground mt-1">{pendingJobCount} pending · {completedTodayCount} completed today</p></div>
-          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Fuel className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Avg Fleet Fuel</span></div><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length > 0 ? `${Math.round(vehicles.reduce((s, v) => s + (v.fuel_level ?? 0), 0) / vehicles.length)}%` : "—"}</p></div>
+          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Truck className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Vehicles on Active Jobs</span></div><p className="text-2xl font-mono font-bold text-cyan">{activeVehicleCount}/{vehicles.length}</p></div>
+          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Navigation className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Jobs In Progress</span></div><p className="text-2xl font-mono font-bold text-cyan">{inProgressJobCount}</p><p className="text-xs text-muted-foreground mt-1">{assignedJobCount} assigned · {pendingJobCount} pending · {completedTodayCount} completed today</p></div>
+          <div className="p-3 rounded-lg bg-muted/30"><div className="flex items-center gap-2 mb-1"><Fuel className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Recorded Fuel Level</span></div><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length > 0 ? `${Math.round(vehicles.reduce((s, v) => s + (v.fuel_level ?? 0), 0) / vehicles.length)}%` : "—"}</p><p className="text-xs text-muted-foreground mt-1">Entered on the vehicle record, not measured</p></div>
           <button type="button" className="w-full text-left p-3 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors border border-transparent hover:border-primary/30" onClick={() => setShowETAPanel(true)}>
             <div className="flex items-center justify-between mb-1"><div className="flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /><span className="text-xs text-muted-foreground">Upcoming ETAs</span></div><ChevronRight className="w-4 h-4 text-muted-foreground" /></div>
             <p className="text-xs text-primary mt-1">{upcomingEtas.length} job{upcomingEtas.length === 1 ? "" : "s"} with an ETA →</p>
@@ -326,7 +327,7 @@ export default function Dashboard() {
         </div>
         <div className="mt-6 pt-6 border-t border-border space-y-2">
           <Button className="w-full" variant="outline" size="sm" onClick={() => { refetchVehicles(); refetchJobs(); toast.success("Data refreshed"); }}><RefreshCw className="w-4 h-4 mr-2" />Refresh Data</Button>
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><div className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-green-500" : "bg-amber-500"}`} />{realtimeConnected ? "Instant updates on" : "Refreshing every 20 s"}</div>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><div className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-green-500" : "bg-amber-500"}`} />{realtimeConnected ? "Instant updates on" : "Refreshing every 20–30 s"}</div>
         </div>
       </aside>
 
@@ -340,7 +341,7 @@ export default function Dashboard() {
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Active Jobs</p><p className="text-2xl font-mono font-bold text-cyan">{activeJobCount}</p></div>
+                <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">In Progress</p><p className="text-2xl font-mono font-bold text-cyan">{inProgressJobCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Completed Today</p><p className="text-2xl font-mono font-bold text-green-500">{completedTodayCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Pending</p><p className="text-2xl font-mono font-bold text-amber-500">{pendingJobCount}</p></div>
                 <div className="p-3 rounded-lg bg-muted/30 text-center"><p className="text-xs text-muted-foreground mb-1">Vehicles</p><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length}</p></div>

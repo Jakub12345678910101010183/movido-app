@@ -184,7 +184,7 @@ export default function Fleet() {
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Vehicles</p><p className="text-2xl font-mono font-bold text-cyan">{vehicles.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Active</p><p className="text-2xl font-mono font-bold text-green-500">{vehicles.filter(v => v.status === "active").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">In Maintenance</p><p className="text-2xl font-mono font-bold text-blue-500">{vehicles.filter(v => v.status === "maintenance").length}</p></div>
-          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Avg. Fuel Level</p><p className="text-2xl font-mono font-bold text-amber-500">{vehicles.length > 0 ? Math.round(vehicles.reduce((a, v) => a + (v.fuel_level ?? 0), 0) / vehicles.length) : 0}%</p></div>
+          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1" title="Average of the fuel levels entered on vehicle records, not measured">Avg. Fuel Level (recorded)</p><p className="text-2xl font-mono font-bold text-amber-500">{vehicles.length > 0 ? Math.round(vehicles.reduce((a, v) => a + (v.fuel_level ?? 0), 0) / vehicles.length) : 0}%</p></div>
         </div>
 
         {/* Loading */}
@@ -211,8 +211,8 @@ export default function Fleet() {
                   <div className="bg-muted/30 rounded p-2 text-center"><Weight className="w-3 h-3 mx-auto mb-1 text-muted-foreground" /><p className="text-xs text-muted-foreground">Weight</p><p className="font-mono font-bold text-sm">{vehicle.weight || "-"}t</p></div>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
-                  <div className="flex items-center gap-1"><Fuel className="w-3 h-3" /><span className={(vehicle.fuel_level ?? 0) < 20 ? "text-red-500" : ""}>{vehicle.fuel_level ?? "—"}%</span></div>
-                  <div className="flex items-center gap-1"><Gauge className="w-3 h-3" /><span>{vehicle.mileage != null ? `${(vehicle.mileage / 1000).toFixed(0)}k mi` : "—"}</span></div>
+                  <div className="flex items-center gap-1"><Fuel className="w-3 h-3" /><span className={(vehicle.fuel_level ?? 0) < 20 ? "text-red-500" : ""} title="Entered on the vehicle record, not measured">{vehicle.fuel_level ?? "—"}% recorded</span></div>
+                  <div className="flex items-center gap-1"><Gauge className="w-3 h-3" /><span title="Entered on the vehicle record, not measured">{vehicle.mileage != null ? `${(vehicle.mileage / 1000).toFixed(0)}k mi recorded` : "—"}</span></div>
                   {vehicle.next_service_date && <div className="flex items-center gap-1"><Calendar className="w-3 h-3" /><span>{new Date(vehicle.next_service_date).toLocaleDateString()}</span></div>}
                 </div>
                 <div className="flex items-center gap-2 pt-3 border-t border-border">

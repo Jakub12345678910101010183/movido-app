@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFuelLogs } from "@/hooks/useSupabaseData";
+import { avgCostPerCostedFill } from "@/lib/metrics";
 import { useDrivers, useVehicles } from "@/hooks/useSupabaseData";
 import { LogFuelDialog } from "@/components/RecordForms";
 import type { FuelLog } from "@/lib/database.types";
@@ -72,6 +73,9 @@ export default function FuelReports() {
   const filteredTotal = filtered.reduce((s, l) => s + (l.fuel_amount || 0), 0);
   const filteredCost = filtered.reduce((s, l) => s + (l.fuel_cost || 0), 0);
 
+  // Fills without a recorded cost are left out of the average, not counted as £0.
+  const avgCostPerFill = avgCostPerCostedFill(fuelLogs);
+
   // ---- Per-driver summary ----
   const driverSummary = drivers
     .map((driver) => {
@@ -79,7 +83,7 @@ export default function FuelReports() {
       const litres = logs.reduce((s, l) => s + (l.fuel_amount || 0), 0);
       const cost = logs.reduce((s, l) => s + (l.fuel_cost || 0), 0);
       const fills = logs.length;
-      return { driver, litres, cost, fills, avgCostPerFill: fills > 0 ? cost / fills : 0 };
+      return { driver, litres, cost, fills, avgCostPerFill: avgCostPerCostedFill(logs) };
     })
     .filter((d) => d.fills > 0)
     .sort((a, b) => b.cost - a.cost);
@@ -142,7 +146,7 @@ export default function FuelReports() {
               <span className="text-xs text-muted-foreground">Avg Cost/Fill</span>
             </div>
             <p className="text-2xl font-mono font-bold text-purple-400">
-              £{fuelLogs.length > 0 ? (totalCost / fuelLogs.length).toFixed(2) : "0.00"}
+              {avgCostPerFill === null ? "—" : `£${avgCostPerFill.toFixed(2)}`}
             </p>
           </div>
         </div>
@@ -352,7 +356,7 @@ export default function FuelReports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {driverSummary.map(({ driver, litres, cost, fills, avgCostPerFill }) => {
+                    {driverSummary.map(({ driver, litres, cost, fills, avgCostPerFill: driverAvg }) => {
                       const maxCost = driverSummary[0]?.cost || 1;
                       const barPct = Math.round((cost / maxCost) * 100);
                       return (
@@ -378,7 +382,7 @@ export default function FuelReports() {
                             <span className="text-sm font-mono font-bold text-amber-400">£{cost.toFixed(2)}</span>
                           </td>
                           <td className="p-4 text-right">
-                            <span className="text-sm font-mono text-muted-foreground">£{avgCostPerFill.toFixed(2)}</span>
+                            <span className="text-sm font-mono text-muted-foreground">{driverAvg === null ? "—" : `£${driverAvg.toFixed(2)}`}</span>
                           </td>
                           <td className="p-4">
                             <div className="w-full bg-muted/30 rounded-full h-2 max-w-[120px]">

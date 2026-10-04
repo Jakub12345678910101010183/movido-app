@@ -17,39 +17,13 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useDrivers } from "@/hooks/useSupabaseData";
 import type { Driver } from "@/lib/database.types";
+import { NOTICE_TITLES, sendDriverNotice, type MessagesClient, type NoticeType } from "@/lib/driverNotice";
 
-// ============================================
-// Expo Push Notification sender
-// Calls Expo's public push API directly
-// ============================================
-async function sendExpoPush(
-  pushToken: string,
-  title: string,
-  body: string,
-  data?: Record<string, unknown>
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    if (!pushToken.startsWith("ExponentPushToken")) {
-      return { ok: false, error: "Invalid push token format" };
-    }
-    const res = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json", "Accept-Encoding": "gzip, deflate" },
-      body: JSON.stringify({ to: pushToken, title, body, data: data || {}, sound: "default", priority: "high" }),
-    });
-    const json = await res.json();
-    if (json.data?.status === "error") return { ok: false, error: json.data.message };
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
-}
-
-const notificationTypes = [
-  { value: "info",    label: "Info",     icon: Bell,          title: "Dispatch Info",     color: "text-blue-400" },
-  { value: "urgent",  label: "Urgent",   icon: AlertOctagon,  title: "⚠️ URGENT",         color: "text-red-400" },
-  { value: "job",     label: "New Job",  icon: Send,          title: "New Job Assigned",  color: "text-cyan-400" },
-  { value: "alert",   label: "Alert",    icon: Megaphone,     title: "Dispatch Alert",    color: "text-amber-400" },
+const notificationTypes: { value: NoticeType; label: string; icon: typeof Bell; title: string; color: string }[] = [
+  { value: "info",    label: "Info",     icon: Bell,          title: NOTICE_TITLES.info,   color: "text-blue-400" },
+  { value: "urgent",  label: "Urgent",   icon: AlertOctagon,  title: NOTICE_TITLES.urgent, color: "text-red-400" },
+  { value: "job",     label: "New Job",  icon: Send,          title: NOTICE_TITLES.job,    color: "text-cyan-400" },
+  { value: "alert",   label: "Alert",    icon: Megaphone,     title: NOTICE_TITLES.alert,  color: "text-amber-400" },
 ];
 
 const statusColors: Record<string, string> = {
@@ -171,7 +145,7 @@ export default function Drivers() {
   // Push notification state
   const [showNotifyModal, setShowNotifyModal] = useState(false);
   const [notifyDriver, setNotifyDriver] = useState<Driver | null>(null);
-  const [notifyType, setNotifyType] = useState("info");
+  const [notifyType, setNotifyType] = useState<NoticeType>("info");
   const [notifyMessage, setNotifyMessage] = useState("");
   const [isSendingPush, setIsSendingPush] = useState(false);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -253,38 +227,32 @@ export default function Drivers() {
     setShowNotifyModal(true);
   };
 
-  const handleSendNotification = async () => {
-    if (!notifyDriver || !notifyMessage.trim()) { toast.error("Please enter a message"); return; }
-    const token = (notifyDriver as any).push_token;
-    if (!token) { toast.error(`${notifyDriver.name} has no push token — they need to open the driver app first`); return; }
+  // Notices are saved as messages; the database sends the push to the phone.
+  const sendNotice = async (recipient: string) => {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) { toast.error("Please sign in again"); return false; }
     setIsSendingPush(true);
-    const type = notificationTypes.find(t => t.value === notifyType)!;
-    const result = await sendExpoPush(token, type.title, notifyMessage, { type: notifyType });
+    const result = await sendDriverNotice(supabase as unknown as MessagesClient, { senderId: auth.user.id, recipient, type: notifyType, text: notifyMessage });
     setIsSendingPush(false);
-    if (result.ok) {
-      toast.success(`Notification sent to ${notifyDriver.name}`);
+    if (!result.ok) toast.error(`Failed: ${result.message}`);
+    return result.ok;
+  };
+
+  const handleSendNotification = async () => {
+    if (!notifyDriver) return;
+    if (await sendNotice(notifyDriver.user_id ?? "")) {
+      toast.success(`Sent to ${notifyDriver.name}. It appears in their Messages and as a notification if enabled.`);
       setShowNotifyModal(false);
       setNotifyMessage("");
-    } else {
-      toast.error(`Failed: ${result.error}`);
     }
   };
 
   const handleBroadcast = async () => {
-    if (!notifyMessage.trim()) { toast.error("Please enter a message"); return; }
-    const activeDrivers = drivers.filter(d => (d as any).push_token && (d.status === "on_duty" || d.status === "available"));
-    if (activeDrivers.length === 0) { toast.error("No active drivers with push tokens found"); return; }
-    setIsSendingPush(true);
-    const type = notificationTypes.find(t => t.value === notifyType)!;
-    let sent = 0;
-    for (const driver of activeDrivers) {
-      const result = await sendExpoPush((driver as any).push_token, type.title, notifyMessage, { type: notifyType, broadcast: true });
-      if (result.ok) sent++;
+    if (await sendNotice("broadcast")) {
+      toast.success("Broadcast sent to all drivers in your company");
+      setShowBroadcastModal(false);
+      setNotifyMessage("");
     }
-    setIsSendingPush(false);
-    toast.success(`Broadcast sent to ${sent}/${activeDrivers.length} active drivers`);
-    setShowBroadcastModal(false);
-    setNotifyMessage("");
   };
 
   // ============================================
@@ -381,7 +349,7 @@ export default function Drivers() {
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Drivers</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">On Duty</p><p className="text-2xl font-mono font-bold text-green-500">{drivers.filter(d => d.status === "on_duty").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Available</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.filter(d => d.status === "available").length}</p></div>
-          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Avg. Rating</p><p className="text-2xl font-mono font-bold text-amber-500">{drivers.length > 0 ? (drivers.reduce((a, d) => a + (d.rating ?? 0), 0) / drivers.length).toFixed(1) : "0.0"}</p></div>
+          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1" title="Average of the ratings entered on driver records, not measured">Avg. Rating (recorded)</p><p className="text-2xl font-mono font-bold text-amber-500">{drivers.length > 0 ? (drivers.reduce((a, d) => a + (d.rating ?? 0), 0) / drivers.length).toFixed(1) : "0.0"}</p></div>
         </div>
 
         {isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /><span className="ml-2 text-muted-foreground">Loading drivers...</span></div>}
@@ -397,10 +365,10 @@ export default function Drivers() {
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">License</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours Today</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours/Week</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rating</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Deliveries</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record; no tachograph data">Hours Today (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record; no tachograph data">Hours/Week (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record">Rating (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record, not counted from jobs">Deliveries (recorded)</th>
                 <th className="text-right p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr></thead>
               <tbody>
@@ -439,8 +407,8 @@ export default function Drivers() {
                       <Button
                         variant="outline"
                         size="icon"
-                        title="Send push notification"
-                        className={(driver as any).push_token ? "text-cyan border-cyan/30 hover:bg-cyan/10" : "text-muted-foreground"}
+                        title="Send a notice"
+                        className={driver.user_id ? "text-cyan border-cyan/30 hover:bg-cyan/10" : "text-muted-foreground"}
                         onClick={() => openNotify(driver)}
                       >
                         <Bell className="w-4 h-4" />
@@ -516,15 +484,15 @@ export default function Drivers() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-3">
-              {!(notifyDriver as any)?.push_token && (
+              {!notifyDriver?.user_id && (
                 <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400">
                   <AlertOctagon className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>Driver has no push token — they need to open the Movido Driver App at least once to register.</span>
+                  <span>This driver has not set up the Movido Driver app yet, so they cannot receive notices.</span>
                 </div>
               )}
-              {(notifyDriver as any)?.push_token && (
-                <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400">
-                  <Bell className="w-3 h-3" /> Push token registered ✓
+              {notifyDriver?.user_id && (
+                <div className="flex items-center gap-2 p-2 bg-muted/20 border border-border rounded text-xs text-muted-foreground">
+                  <Bell className="w-3 h-3" /> Saved to the driver's Messages; also sent as a notification if they have turned notifications on.
                 </div>
               )}
               <div>
@@ -565,10 +533,10 @@ export default function Drivers() {
               <Button variant="outline" onClick={() => setShowNotifyModal(false)}>Cancel</Button>
               <Button
                 onClick={handleSendNotification}
-                disabled={isSendingPush || !notifyMessage.trim()}
+                disabled={isSendingPush || !notifyMessage.trim() || !notifyDriver?.user_id}
                 className="glow-cyan-sm"
               >
-                {isSendingPush ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</> : <><Send className="w-4 h-4 mr-2" />Send Push</>}
+                {isSendingPush ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</> : <><Send className="w-4 h-4 mr-2" />Send</>}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -580,12 +548,12 @@ export default function Drivers() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-400" />
-                Broadcast to All Active Drivers
+                Broadcast to All Drivers
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-3">
               <p className="text-xs text-muted-foreground">
-                Sends to all <strong className="text-foreground">{drivers.filter(d => (d as any).push_token && (d.status === "on_duty" || d.status === "available")).length}</strong> active drivers with registered push tokens.
+                Saved to the Messages of every driver in your company (<strong className="text-foreground">{drivers.filter(d => d.user_id).length}</strong> with the app) and sent as a notification to those who have notifications on.
               </p>
               <div>
                 <Label>Notification Type</Label>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LIVE_POSITION_MAX_AGE_MS, isLivePosition, liveVehicles, positionAge } from "./livePosition";
+import { LIVE_POSITION_MAX_AGE_MS, STALE_POSITION_MS, isLivePosition, isStalePosition, liveVehicles, positionAge, positionMarker, positionStatus } from "./livePosition";
+import { STALE_MARKER_COLOR, markerColor } from "../components/TomTomMap";
 
 const NOW = Date.parse("2026-09-28T09:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -43,5 +44,58 @@ describe("positionAge", () => {
     expect(positionAge(ago(25 * 60_000), NOW)).toBe("25 min ago");
     expect(positionAge(ago(3 * 3600 * 1000), NOW)).toBe("3 h ago");
     expect(positionAge(null, NOW)).toBe("time unknown");
+  });
+});
+
+describe("isStalePosition", () => {
+  it("marks a position older than 15 minutes, or missing, as stale", () => {
+    expect(isStalePosition(ago(60_000), NOW)).toBe(false);
+    expect(isStalePosition(ago(STALE_POSITION_MS + 1000), NOW)).toBe(true);
+    expect(isStalePosition(null, NOW)).toBe(true);
+    expect(isStalePosition("not a date", NOW)).toBe(true);
+  });
+});
+
+describe("O-5: office map marker freshness", () => {
+  const marker = (reportedAt: string | null, now = NOW) =>
+    positionMarker({ id: "driver-8", lat: 50.75, lng: -1.9, label: "QA-HGV-01", status: "available", popupHtml: "<strong>QA Driver</strong>", reportedAt, now });
+
+  it("a position reported 16 minutes ago is stale, grey and labelled as the last known position", () => {
+    const m = marker(ago(16 * 60_000));
+    expect(m.stale).toBe(true);
+    expect(m.popup).toBe("<strong>QA Driver</strong><br/>Last known position 16 min ago");
+    expect(markerColor(m)).toBe(STALE_MARKER_COLOR);
+    expect(STALE_MARKER_COLOR).toBe("#6B7280");
+  });
+
+  it("a position reported 5 minutes ago is current and keeps the vehicle colour", () => {
+    const m = marker(ago(5 * 60_000));
+    expect(m.stale).toBe(false);
+    expect(m.popup).toBe("<strong>QA Driver</strong><br/>Updated 5 min ago");
+    expect(markerColor(m)).toBe("#00FFD4");
+    expect(m.popup).not.toContain("Last known position");
+  });
+
+  it("keeps the 15-minute rule exactly: 15 min is current, just over is stale", () => {
+    expect(STALE_POSITION_MS).toBe(15 * 60 * 1000);
+    expect(marker(ago(STALE_POSITION_MS)).stale).toBe(false);
+    expect(marker(ago(STALE_POSITION_MS + 1000)).stale).toBe(true);
+  });
+
+  it("is judged by the reported time, not by when the page fetched it", () => {
+    // Freshly loaded just now (page refresh), but the phone reported it 2 h ago: still stale.
+    const loadedNow = positionMarker({ id: "v", lat: 0, lng: 0, popupHtml: "", reportedAt: new Date(Date.now() - 2 * 3600_000).toISOString() });
+    expect(loadedNow.stale).toBe(true);
+    expect(loadedNow.popup).toContain("Last known position 2 h ago");
+    // Same reported time looks current only while within 15 minutes of it.
+    const reported = ago(10 * 60_000);
+    expect(positionStatus(reported, NOW).stale).toBe(false);
+    expect(positionStatus(reported, NOW + 6 * 60_000).stale).toBe(true);
+  });
+
+  it("an unknown report time is never shown as current", () => {
+    const m = marker(null);
+    expect(m.stale).toBe(true);
+    expect(m.popup).toContain("Last known position time unknown");
   });
 });

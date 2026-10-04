@@ -1,3 +1,5 @@
+import type { MapMarker } from "@/components/TomTomMap";
+
 /**
  * Freshness rule for positions shown on the office map. A driver or vehicle
  * whose last GPS position is older than this is not presented as live.
@@ -9,6 +11,41 @@ export function isLivePosition(iso: string | null | undefined, now: number = Dat
   if (!iso) return false;
   const t = new Date(iso).getTime();
   return Number.isFinite(t) && now - t <= LIVE_POSITION_MAX_AGE_MS;
+}
+
+/**
+ * A position older than this is shown as the last known position, not as
+ * where the vehicle is now (drivers report about once a minute while moving).
+ */
+export const STALE_POSITION_MS = 15 * 60 * 1000;
+
+/** True when a position is missing or older than STALE_POSITION_MS. */
+export function isStalePosition(iso: string | null | undefined, now: number = Date.now()): boolean {
+  if (!iso) return true;
+  const t = new Date(iso).getTime();
+  return !Number.isFinite(t) || now - t > STALE_POSITION_MS;
+}
+
+/** How a position is described: "Updated 3 min ago" or "Last known position 2 h ago". */
+export function positionStatus(iso: string | null | undefined, now: number = Date.now()): { stale: boolean; text: string } {
+  const stale = isStalePosition(iso, now);
+  return { stale, text: `${stale ? "Last known position" : "Updated"} ${positionAge(iso, now)}` };
+}
+
+/**
+ * A vehicle marker for the office map. Freshness comes from `reportedAt`, the
+ * time the phone reported the position, never from when the page loaded it.
+ * `popupHtml` must already be escaped.
+ */
+export function positionMarker(input: {
+  id: string; lat: number; lng: number; label?: string; status?: string; popupHtml: string;
+  reportedAt: string | null | undefined; now?: number;
+}): MapMarker {
+  const { stale, text } = positionStatus(input.reportedAt, input.now);
+  return {
+    id: input.id, lat: input.lat, lng: input.lng, label: input.label, type: "vehicle", status: input.status,
+    stale, popup: `${input.popupHtml}<br/>${text}`,
+  };
 }
 
 export function positionAge(iso: string | null | undefined, now: number = Date.now()): string {
