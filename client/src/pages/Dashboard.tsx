@@ -23,7 +23,7 @@ import { CLEAN_AIR_ZONES, CAZ_CHECK_URL } from "@/lib/cleanAirZones";
 import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
 import { useVehicles, useJobs, useDrivers, useRealtimeDriverLocations } from "@/hooks/useSupabaseData";
-import { isStalePosition, liveVehicles, positionAge } from "@/lib/livePosition";
+import { liveVehicles, positionMarker } from "@/lib/livePosition";
 import { completedToday, vehiclesOnActiveJobs } from "@/lib/metrics";
 
 const milesToKm = (miles: number) => miles * 1.60934;
@@ -78,24 +78,24 @@ export default function Dashboard() {
     liveDrivers.forEach((driver) => {
       if (driver.location_lat && driver.location_lng) {
         const vehicle = vehicles.find((v) => v.driver_id === driver.id);
-        markers.push({
+        markers.push(positionMarker({
           id: `driver-${driver.id}`, lat: driver.location_lat, lng: driver.location_lng,
-          label: vehicle?.vehicle_id || driver.name, type: "vehicle", status: driver.status,
-          stale: isStalePosition(driver.location_updated_at),
-          popup: `<strong>${escapeHtml(driver.name)}</strong><br/>${vehicle ? `Vehicle: ${escapeHtml(vehicle.vehicle_id)}<br/>` : ""}Status: ${driver.status}<br/>${isStalePosition(driver.location_updated_at) ? "Last known position" : "Updated"} ${positionAge(driver.location_updated_at)}`,
-        });
+          label: vehicle?.vehicle_id || driver.name, status: driver.status,
+          popupHtml: `<strong>${escapeHtml(driver.name)}</strong><br/>${vehicle ? `Vehicle: ${escapeHtml(vehicle.vehicle_id)}<br/>` : ""}Status: ${escapeHtml(driver.status)}`,
+          reportedAt: driver.location_updated_at,
+        }));
       }
     });
 
     // Fallback: vehicles with a recent stored position (same 12 h rule as drivers)
     if (liveDrivers.length === 0) {
       liveVehicles(vehicles).forEach((v) => {
-        markers.push({
+        markers.push(positionMarker({
           id: `vehicle-${v.id}`, lat: v.location_lat!, lng: v.location_lng!,
-          label: v.vehicle_id, type: "vehicle", status: v.status,
-          stale: isStalePosition(v.location_updated_at),
-          popup: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}<br/>${isStalePosition(v.location_updated_at) ? "Last known position" : "Updated"} ${positionAge(v.location_updated_at)}`,
-        });
+          label: v.vehicle_id, status: v.status,
+          popupHtml: `<strong>${escapeHtml(v.vehicle_id)}</strong><br/>${escapeHtml(v.make || "")} ${escapeHtml(v.model || "")}`,
+          reportedAt: v.location_updated_at,
+        }));
       });
     }
 
@@ -186,6 +186,7 @@ export default function Dashboard() {
             <h3 className="font-semibold text-sm">Active Fleet</h3>
             <span className="text-xs text-muted-foreground font-mono">{vehiclesLoading ? "..." : `${vehicles.length} vehicles`}</span>
           </div>
+          <p className="text-xs text-muted-foreground -mt-2 mb-3" data-testid="fleet-recorded-note">Status and fuel are entered on the vehicle record, not live telemetry.</p>
           {vehiclesLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 rounded-lg bg-muted/20 animate-pulse" />)}</div>
           ) : vehicles.length === 0 ? (
@@ -196,7 +197,7 @@ export default function Dashboard() {
                 <div key={vehicle.id} className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedVehicle === `vehicle-${vehicle.id}` ? "border-primary/50 bg-primary/5" : "border-border bg-card/50 hover:border-primary/30"}`} onClick={() => setSelectedVehicle(`vehicle-${vehicle.id}`)}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-sm">{vehicle.vehicle_id}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${vehicle.status === "active" ? "bg-green-500/20 text-green-500" : vehicle.status === "maintenance" ? "bg-amber-500/20 text-amber-500" : vehicle.status === "offline" ? "bg-red-500/20 text-red-500" : "bg-muted text-muted-foreground"}`}>{vehicle.status}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${vehicle.status === "active" ? "bg-green-500/20 text-green-500" : vehicle.status === "maintenance" ? "bg-amber-500/20 text-amber-500" : vehicle.status === "offline" ? "bg-red-500/20 text-red-500" : "bg-muted text-muted-foreground"}`} title="Set manually on the vehicle record">{vehicle.status} (manual)</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="font-mono">{vehicle.type.toUpperCase()}</span>
@@ -207,7 +208,7 @@ export default function Dashboard() {
                     <div className="mt-2 flex items-center gap-2">
                       <Fuel className="w-3 h-3 text-muted-foreground" />
                       <div className="flex-1 h-1.5 bg-muted rounded-full"><div className={`h-full rounded-full ${vehicle.fuel_level > 50 ? "bg-green-500" : vehicle.fuel_level > 20 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${vehicle.fuel_level}%` }} /></div>
-                      <span className="text-xs font-mono">{vehicle.fuel_level}%</span>
+                      <span className="text-xs font-mono" title="Entered on the vehicle record, not measured">{vehicle.fuel_level}% recorded</span>
                     </div>
                   )}
                 </div>
@@ -293,7 +294,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium">{vehicleMatch?.status || driverMatch?.status}</p></div>
                   {driverMatch && <div><p className="text-xs text-muted-foreground">Driver</p><p className="font-medium">{driverMatch.name}</p></div>}
-                  {vehicleMatch && <><div><p className="text-xs text-muted-foreground">Type</p><p className="font-mono">{vehicleMatch.type.toUpperCase()}</p></div><div><p className="text-xs text-muted-foreground">Fuel</p><p className="font-mono">{vehicleMatch.fuel_level}%</p></div></>}
+                  {vehicleMatch && <><div><p className="text-xs text-muted-foreground">Type</p><p className="font-mono">{vehicleMatch.type.toUpperCase()}</p></div><div><p className="text-xs text-muted-foreground">Fuel (recorded)</p><p className="font-mono">{vehicleMatch.fuel_level}%</p></div></>}
                   {driverMatch?.location_lat && <><div><p className="text-xs text-muted-foreground">Lat</p><p className="font-mono text-xs">{driverMatch.location_lat.toFixed(4)}°N</p></div><div><p className="text-xs text-muted-foreground">Lng</p><p className="font-mono text-xs">{Math.abs(driverMatch.location_lng ?? 0).toFixed(4)}°{(driverMatch.location_lng ?? 0) < 0 ? "W" : "E"}</p></div></>}
                 </div>
               </div>

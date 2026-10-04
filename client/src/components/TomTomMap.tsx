@@ -104,7 +104,7 @@ interface TomTomMapProps {
   onMapClick?: (lat: number, lng: number) => void;
 }
 
-const STALE_MARKER_COLOR = "#6B7280"; // Grey - last known position, not current
+export const STALE_MARKER_COLOR = "#6B7280"; // Grey - last known position, not current
 
 // Marker colors by type
 const MARKER_COLORS: Record<string, string> = {
@@ -117,12 +117,17 @@ const MARKER_COLORS: Record<string, string> = {
   caz: "#F97316",       // Orange - CAZ zones
 };
 
+/** Marker colour: grey for a last known (stale) position, otherwise by type. */
+export function markerColor(marker: Pick<MapMarker, "type" | "stale">): string {
+  return marker.stale ? STALE_MARKER_COLOR : MARKER_COLORS[marker.type || "waypoint"] || "#00FFD4";
+}
+
 /**
  * Create a custom HTML marker element
  */
 function createMarkerElement(marker: MapMarker): HTMLElement {
   const el = document.createElement("div");
-  const color = marker.stale ? STALE_MARKER_COLOR : MARKER_COLORS[marker.type || "waypoint"] || "#00FFD4";
+  const color = markerColor(marker);
 
   if (marker.type === "vehicle") {
     el.innerHTML = `
