@@ -1,48 +1,73 @@
--- Read-only postcheck. Prints booleans, counts and hashes only; exits non-zero
--- unless the state matches :'expect':
+-- Read-only postcheck. Prints booleans, counts, versions and hashes only; exits
+-- non-zero unless the state matches :'expect':
 --   applied      O-1 recorded and in place, rollback not recorded
 --   rolled_back  O-1 and its rollback recorded, O-1 objects gone, policy restored
+-- History rows are found by name; their versions must be 14-digit apply-time
+-- UTC timestamps after the pre-O-1 latest version (rollback after O-1).
+-- Office functions are checked semantically: signature, language, SECURITY
+-- DEFINER, search_path, md5(prosrc) of the audited body, trigger wiring.
 -- psql variables (from ops/migrate/expect.json via run.sh):
---   expect, expect_history_count, protected_hashes, office_guard_hash,
---   office_audit_hash, pod_delete_qual_md5
+--   expect, expect_history_count, expect_history_last, protected_hashes,
+--   office_guard_prosrc_md5, office_audit_prosrc_md5, office_proconfig, pod_delete_qual_md5
 \set ON_ERROR_STOP on
 BEGIN READ ONLY;
 SELECT
   h.n                                                AS history_count,
   h.o1 = 1                                           AS o1_recorded,
   h.rb = 1                                           AS rollback_recorded,
+  COALESCE(h.o1_version, 'none')                     AS o1_version,
+  COALESCE(h.rb_version, 'none')                     AS rollback_version,
+  COALESCE(h.all14, false)                           AS history_versions_14_digits,
+  COALESCE(h.o1_version > :'expect_history_last', false) AS o1_version_after_previous,
+  COALESCE(h.rb_version > h.o1_version, false)       AS rollback_version_after_o1,
   s.col                                              AS column_present,
-  COALESCE(s.guard_hash = :'office_guard_hash', false) AS guard_function_ok,
-  COALESCE(s.audit_hash = :'office_audit_hash', false) AS audit_function_ok,
+  s.guard_ok                                         AS guard_function_ok,
+  s.audit_ok                                         AS audit_function_ok,
   s.fns                                              AS office_function_count,
+  s.trgs_ok                                          AS office_triggers_ok,
   s.trgs                                             AS office_trigger_count,
   s.exec_revoked                                     AS execute_revoked,
   s.pod_policy                                       AS pod_delete_policy_present,
   COALESCE(s.protected = :'protected_hashes', false) AS protected_hashes_ok,
   CASE :'expect'
-    WHEN 'applied' THEN COALESCE(h.n = :expect_history_count + 1 AND h.o1 = 1 AND h.rb = 0 AND s.col
-      AND s.guard_hash = :'office_guard_hash' AND s.audit_hash = :'office_audit_hash' AND s.trgs = 2
-      AND s.exec_revoked AND NOT s.pod_policy AND s.protected = :'protected_hashes', false)
-    WHEN 'rolled_back' THEN COALESCE(h.n = :expect_history_count + 2 AND h.o1 = 1 AND h.rb = 1 AND NOT s.col
+    WHEN 'applied' THEN COALESCE(h.n = :expect_history_count + 1 AND h.all14 AND h.o1 = 1 AND h.rb = 0
+      AND h.o1_version > :'expect_history_last' AND s.col AND s.guard_ok AND s.audit_ok AND s.fns = 2
+      AND s.trgs_ok AND s.trgs = 2 AND s.exec_revoked AND NOT s.pod_policy AND s.protected = :'protected_hashes', false)
+    WHEN 'rolled_back' THEN COALESCE(h.n = :expect_history_count + 2 AND h.all14 AND h.o1 = 1 AND h.rb = 1
+      AND h.o1_version > :'expect_history_last' AND h.rb_version > h.o1_version AND NOT s.col
       AND s.fns = 0 AND s.trgs = 0 AND s.pod_policy AND s.protected = :'protected_hashes', false)
     ELSE false
   END                                                AS all_ok
 FROM
-  (SELECT count(*) AS n,
-          count(*) FILTER (WHERE version = '20261004120000' AND name = 'office_job_guard') AS o1,
-          count(*) FILTER (WHERE version = '20261004120500' AND name = 'office_job_guard_rollback') AS rb
+  (SELECT count(*) AS n, bool_and(version::text ~ '^[0-9]{14}$') AS all14,
+          count(*) FILTER (WHERE name = 'office_job_guard') AS o1,
+          count(*) FILTER (WHERE name = 'office_job_guard_rollback') AS rb,
+          max(version::text) FILTER (WHERE name = 'office_job_guard') AS o1_version,
+          max(version::text) FILTER (WHERE name = 'office_job_guard_rollback') AS rb_version
      FROM supabase_migrations.schema_migrations) h,
   (SELECT
      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'jobs'
               AND column_name = 'cancellation_reason' AND data_type = 'text' AND is_nullable = 'YES') AS col,
-     (SELECT md5(pg_get_functiondef(p.oid)) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-       AND p.proname = 'jobs_office_guard') AS guard_hash,
-     (SELECT md5(pg_get_functiondef(p.oid)) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-       AND p.proname = 'jobs_office_audit') AS audit_hash,
+     EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'jobs_office_guard'
+              AND p.prokind = 'f' AND p.pronargs = 0 AND p.prorettype = 'trigger'::regtype AND NOT p.proretset
+              AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql') AND p.provolatile = 'v'
+              AND NOT p.prosecdef AND p.proconfig = ARRAY[:'office_proconfig']
+              AND md5(p.prosrc) = :'office_guard_prosrc_md5') AS guard_ok,
+     EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'jobs_office_audit'
+              AND p.prokind = 'f' AND p.pronargs = 0 AND p.prorettype = 'trigger'::regtype AND NOT p.proretset
+              AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql') AND p.provolatile = 'v'
+              AND p.prosecdef AND p.proconfig = ARRAY[:'office_proconfig']
+              AND md5(p.prosrc) = :'office_audit_prosrc_md5') AS audit_ok,
      (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace
        AND proname IN ('jobs_office_guard', 'jobs_office_audit')) AS fns,
-     (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.jobs'::regclass AND tgenabled <> 'D'
+     (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.jobs'::regclass
        AND tgname IN ('jobs_office_guard', 'jobs_office_audit')) AS trgs,
+     (SELECT count(*) = 2 FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+       WHERE t.tgrelid = 'public.jobs'::regclass AND t.tgname IN ('jobs_office_guard', 'jobs_office_audit')
+         AND p.pronamespace = 'public'::regnamespace AND p.proname = t.tgname
+         AND t.tgtype = CASE t.tgname WHEN 'jobs_office_guard' THEN 23 ELSE 29 END
+         AND t.tgenabled = 'O' AND NOT t.tgisinternal AND t.tgnargs = 0 AND t.tgqual IS NULL
+         AND cardinality(t.tgattr::int2[]) = 0) AS trgs_ok,
      COALESCE((SELECT bool_and(p.proacl IS NOT NULL AND NOT EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0)
                  AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
                  AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE'))
@@ -58,7 +83,8 @@ FROM
 \gset post_
 COMMIT;
 \echo 'postcheck expect=':expect ' history_count=':post_history_count ' o1_recorded=':post_o1_recorded ' rollback_recorded=':post_rollback_recorded
-\echo 'postcheck column_present=':post_column_present ' guard_function_ok=':post_guard_function_ok ' audit_function_ok=':post_audit_function_ok ' office_function_count=':post_office_function_count ' office_trigger_count=':post_office_trigger_count
+\echo 'postcheck o1_version=':post_o1_version ' rollback_version=':post_rollback_version ' history_versions_14_digits=':post_history_versions_14_digits ' o1_version_after_previous=':post_o1_version_after_previous ' rollback_version_after_o1=':post_rollback_version_after_o1
+\echo 'postcheck column_present=':post_column_present ' guard_function_ok=':post_guard_function_ok ' audit_function_ok=':post_audit_function_ok ' office_function_count=':post_office_function_count ' office_triggers_ok=':post_office_triggers_ok ' office_trigger_count=':post_office_trigger_count
 \echo 'postcheck execute_revoked=':post_execute_revoked ' pod_delete_policy_present=':post_pod_delete_policy_present ' protected_hashes_ok=':post_protected_hashes_ok
 \if :post_all_ok
   \echo 'postcheck: PASS'

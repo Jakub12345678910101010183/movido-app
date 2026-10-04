@@ -9,11 +9,27 @@ approval on the protected `production-db` GitHub environment.
 | File | Purpose |
 |---|---|
 | `allowlist.json` | The only files that may run: name → path at the pinned `source_commit` and SHA-256 |
-| `expect.json` | Production state the wrappers assert (history count/last version, protected driver-function hashes, expected Office-guard hashes, `pod_photos_delete` fingerprint) |
+| `expect.json` | State the wrappers assert: history count/last version, protected driver-function hashes and `pod_photos_delete` fingerprint (read from production); md5 of the Office function bodies and their `search_path` (from the pinned O-1 file) |
+| `fnbody.py` | Prints the md5 of each function body in a SQL file; `vet` refuses unless it matches `expect.json` |
 | `sqlguard.py` | Refuses transaction control, `CONCURRENTLY`, `VACUUM`, `COPY … PROGRAM` and psql meta-commands |
 | `run.sh` | `vet`, `check-url`, `precheck`, `apply`, `postcheck applied/rolled_back` |
 | `precheck.sql` / `postcheck.sql` | Read-only; print booleans, counts and hashes; exit non-zero on mismatch |
 | `wrap_o1.sql` / `wrap_o1_rollback.sql` | One transaction: preconditions → migration → `supabase_migrations.schema_migrations` row → postconditions |
+
+## Migration history and checks
+
+- History rows are identified by **name** (`office_job_guard`,
+  `office_job_guard_rollback`). Each row's version is generated inside the
+  transaction as the apply-time UTC timestamp
+  (`to_char(clock_timestamp() at time zone 'UTC', 'YYYYMMDDHH24MISS')`), must be
+  14 digits, later than the current latest version and unused. The wrappers stop
+  if the history table's `version`/`name`/`created_by` are not text, `statements`
+  is not `text[]` or `version` has no unique key.
+- The Office functions are checked semantically, independent of the PostgreSQL
+  version: no arguments, `returns trigger`, `plpgsql`, SECURITY DEFINER only for
+  the audit function, `search_path=public, pg_temp`, `md5(prosrc)` equal to the
+  body in the pinned O-1 file, and both triggers wired to them (BEFORE INSERT OR
+  UPDATE / AFTER INSERT OR UPDATE OR DELETE, FOR EACH ROW, enabled).
 
 ## Run (owner)
 

@@ -1,9 +1,10 @@
 {
-  "comment": "Production state the O-1 wrappers assert, read from production on 2026-10-04. Any difference stops the run before or inside the transaction.",
+  "comment": "history_*, protected_hashes and pod_delete_qual_md5: read from production on 2026-10-04. office_*_prosrc_md5: md5 of the function bodies in the allowlisted O-1 file (run.sh vet re-derives them from the SHA-pinned file and refuses on mismatch). office_proconfig: the SET clause both Office functions declare. Any difference stops the run before or inside the transaction.",
   "history_count_before": 65,
   "history_last_before": "20261001115200",
   "protected_hashes": "driver_complete_job=6cb707bb026132195886ae37135d43f7 driver_confirm_stop=b59f3adf71711cc8fc844ca56caf81c6 driver_report_location=ecd9a46caf886bb0d62cc33820e0c256 driver_report_locations=acdad53afd93965e42b4dfffde7e55af driver_start_job=e157a6e0d5202d234fb3b7cffd0ba499 driver_stop_location_check=23c5de2d4e71711dbc739bc21d9128c0 evaluate_geofences=fbc85bc223b9c051486cef01e1c9499f jobs_driver_field_guard=3384c544e7d0b85c3a3fa69e9400dc53",
-  "office_guard_hash": "90266aa40c2026d054cb59a20c0cdb71",
-  "office_audit_hash": "f30344255e6e42e1637627ddaf568432",
+  "office_guard_prosrc_md5": "24e7ba2cb45caed15d56403ed72ef3cc",
+  "office_audit_prosrc_md5": "19fd95e0e2e6c755082729965c333e7f",
+  "office_proconfig": "search_path=public, pg_temp",
   "pod_delete_qual_md5": "55ca8f83d118b66517c67a372f7b69fc"
 }
