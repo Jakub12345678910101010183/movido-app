@@ -89,14 +89,9 @@ function useRealtimeTable<T extends { id: number | string }>(
           }
         }
       )
-      .subscribe((status) => {
-        // Changes made while the channel was down are never replayed: reload on
-        // reconnect, and poll until instant updates are back.
-        const live = status === "SUBSCRIBED";
-        if (live && fallback.wasDown) void fetch();
-        fallback.wasDown = !live;
-        fallback.set(!live);
-      });
+      // Poll while the channel is down and reload on reconnect. Statuses that
+      // arrive after cleanup (CLOSED on removeChannel) are ignored.
+      .subscribe((status) => fallback.onStatus(status));
 
     return () => {
       fallback.stop();
@@ -449,12 +444,7 @@ export function useFuelLogs(driverId?: number) {
       .on("postgres_changes", { event: "*", schema: "public", table: "fuel_logs" }, () => {
         fetch();
       })
-      .subscribe((status) => {
-        const live = status === "SUBSCRIBED";
-        if (live && fallback.wasDown) void fetch();
-        fallback.wasDown = !live;
-        fallback.set(!live);
-      });
+      .subscribe((status) => fallback.onStatus(status));
 
     return () => { fallback.stop(); supabase.removeChannel(channel); };
   }, [fetch]);

@@ -349,7 +349,7 @@ export default function Drivers() {
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Total Drivers</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">On Duty</p><p className="text-2xl font-mono font-bold text-green-500">{drivers.filter(d => d.status === "on_duty").length}</p></div>
           <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Available</p><p className="text-2xl font-mono font-bold text-cyan">{drivers.filter(d => d.status === "available").length}</p></div>
-          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1">Avg. Rating</p><p className="text-2xl font-mono font-bold text-amber-500">{drivers.length > 0 ? (drivers.reduce((a, d) => a + (d.rating ?? 0), 0) / drivers.length).toFixed(1) : "0.0"}</p></div>
+          <div className="card-terminal p-4"><p className="text-xs text-muted-foreground mb-1" title="Average of the ratings entered on driver records, not measured">Avg. Rating (recorded)</p><p className="text-2xl font-mono font-bold text-amber-500">{drivers.length > 0 ? (drivers.reduce((a, d) => a + (d.rating ?? 0), 0) / drivers.length).toFixed(1) : "0.0"}</p></div>
         </div>
 
         {isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /><span className="ml-2 text-muted-foreground">Loading drivers...</span></div>}
@@ -365,10 +365,10 @@ export default function Drivers() {
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">License</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours Today</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours/Week</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rating</th>
-                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Deliveries</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record; no tachograph data">Hours Today (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record; no tachograph data">Hours/Week (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record">Rating (recorded)</th>
+                <th className="text-left p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Entered on the driver record, not counted from jobs">Deliveries (recorded)</th>
                 <th className="text-right p-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr></thead>
               <tbody>
