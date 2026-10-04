@@ -1,0 +1,99 @@
+# Production database migration: allowlisted files only, one transaction,
+# behind the protected `production-db` environment (manual approval).
+#
+# Public repository: every log line is public. The steps print only checks,
+# booleans, counts and hashes. The database URL is a masked environment secret
+# and is never echoed. The Supabase CLI is never installed or used.
+name: db-migrate (production, allowlisted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: Allowlisted migration file (see ops/migrate/allowlist.json)
+        required: true
+        type: choice
+        options:
+          - 20261004120000_office_job_guard.sql
+          - 20261004120500_office_job_guard_rollback.sql
+      confirm:
+        description: 'Type exactly: APPLY <migration file name>'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: ${{ inputs.migration }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production-db
+    env:
+      # Passed through the environment, never interpolated into shell code.
+      MIGRATION: ${{ inputs.migration }}
+      CONFIRM: ${{ inputs.confirm }}
+      PGSSLMODE: require
+    steps:
+      - name: Check out ops scripts (this commit)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Confirm the selection
+        run: |
+          if [ "$CONFIRM" != "APPLY $MIGRATION" ]; then
+            echo "Confirmation text does not match the selected migration." >&2
+            exit 1
+          fi
+          echo "confirmed: $MIGRATION"
+
+      - name: Fetch the pinned source commit
+        run: |
+          commit=$(jq -r '.source_commit' ops/migrate/allowlist.json)
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "bad source commit" >&2; exit 1; }
+          git fetch --no-tags --depth=1 origin "$commit"
+          echo "source commit: $commit"
+
+      - name: Vet the migration (allowlist, SHA-256, sqlguard)
+        run: bash ops/migrate/run.sh vet
+
+      - name: Tools
+        run: psql --version
+
+      - name: Check connection target (Session Pooler, port 5432)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash ops/migrate/run.sh check-url
+
+      - name: Precheck (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ "$MIGRATION" = "20261004120000_office_job_guard.sql" ]; then
+            bash ops/migrate/run.sh precheck
+          else
+            bash ops/migrate/run.sh postcheck applied
+          fi
+
+      - name: Apply in one transaction
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash ops/migrate/run.sh apply
+
+      - name: Postcheck (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ "$MIGRATION" = "20261004120000_office_job_guard.sql" ]; then
+            bash ops/migrate/run.sh postcheck applied
+          else
+            bash ops/migrate/run.sh postcheck rolled_back
+          fi
