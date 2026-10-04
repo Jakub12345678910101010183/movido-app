@@ -171,6 +171,8 @@ type JobRow = {
   pod_photo_url: string | null;
   pod_notes: string | null;
   driver_notes: string | null;
+  /** Why the Office cancelled the job (set only with status = cancelled). */
+  cancellation_reason: string | null;
   tracking_token: string | null;
   vehicle_id: number | null;
   driver_id: number | null;

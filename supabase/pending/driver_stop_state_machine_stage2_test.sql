@@ -165,12 +165,17 @@ select public.evaluate_geofences(670001, '00000000-0000-4000-a000-0000000000e1',
 insert into sm_result select 'geofence at stop 1 (next stop): auto-arrival',
   pg_temp.stop_status(670005, 0) = 'arrived', pg_temp.stop_status(670005, 0);
 
--- Office admin can still edit stops directly (unchanged).
+-- Office admin cannot mark a stop delivered by editing stops (office_job_guard).
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-b000-0000000000e2', true);
-update public.jobs set stops = jsonb_set(stops, '{1,status}', '"completed"') where id = 670005;
+do $$ begin
+  update public.jobs set stops = jsonb_set(stops, '{1,status}', '"completed"') where id = 670005;
+  insert into sm_result values ('office admin cannot set a stop delivered', false, 'accepted');
+exception when others then
+  insert into sm_result values ('office admin cannot set a stop delivered', sqlerrm = 'STOP_HISTORY_LOCKED', sqlerrm);
+end $$;
 reset role;
-insert into sm_result select 'office admin stop edit unchanged', pg_temp.stop_status(670005, 1) = 'completed', '';
+insert into sm_result select 'stop 2 unchanged after the refused Office edit', pg_temp.stop_status(670005, 1) = 'pending', pg_temp.stop_status(670005, 1);
 
 select case when pass then 'PASS' else 'FAIL' end as result, name, detail from sm_result;
 select count(*) filter (where pass) as passed, count(*) filter (where not pass) as failed from sm_result;

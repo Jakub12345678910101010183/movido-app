@@ -100,14 +100,20 @@ insert into lock_result select 'photo completion stores the path',
   format('%s %s', pod_status, pod_photo_url) from public.jobs where id = 660003;
 insert into lock_result select 'other company job untouched', status = 'in_progress' and pod_signature is null, status::text from public.jobs where id = 660005;
 
--- Office admin workflows unchanged.
+-- Office admin: cannot complete or write POD (office_job_guard); normal edits still work.
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-b000-0000000000d2', true);
-update public.jobs set status = 'completed', pod_status = 'signed', pod_signature = 'data:image/png;base64,BB==',
-       pod_notes = 'Office captured', driver_notes = 'Office edit' where id = 660001;
+do $$ begin
+  update public.jobs set status = 'completed', pod_status = 'signed', pod_signature = 'data:image/png;base64,BB==',
+         pod_notes = 'Office captured', driver_notes = 'Office edit' where id = 660001;
+  insert into lock_result values ('office admin cannot complete or write POD', false, 'accepted');
+exception when others then
+  insert into lock_result values ('office admin cannot complete or write POD', sqlerrm = 'POD_READ_ONLY', sqlerrm);
+end $$;
+update public.jobs set driver_notes = 'Office edit' where id = 660001;
 reset role;
-insert into lock_result select 'office admin can complete and edit POD', status = 'completed' and pod_notes = 'Office captured'
-  and driver_notes = 'Office edit', format('%s %s', status, pod_notes) from public.jobs where id = 660001;
+insert into lock_result select 'office admin can still edit dispatch fields', status = 'in_progress' and pod_status = 'pending'
+  and pod_signature is null and driver_notes = 'Office edit', format('%s %s', status, pod_status) from public.jobs where id = 660001;
 
 select case when pass then 'PASS' else 'FAIL' end as result, name, detail from lock_result;
 do $$ begin

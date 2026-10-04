@@ -315,10 +315,30 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
           };
         }
 
-        const { error } = await supabase
+        // Only jobs not yet started can be (re)assigned; completed and
+        // cancelled jobs are never reopened (jobs_office_guard enforces it).
+        if (job.status !== "pending" && job.status !== "assigned") {
+          return {
+            id: `ai-${Date.now()}`,
+            role: "assistant",
+            content: `${job.reference} is ${job.status.replace("_", " ")} and cannot be reassigned.`,
+            timestamp: now,
+          };
+        }
+        const { data: assigned, error } = await supabase
           .from("jobs")
           .update({ driver_id: driver.id, status: "assigned" })
-          .eq("id", job.id);
+          .eq("id", job.id)
+          .in("status", ["pending", "assigned"])
+          .select("id");
+        if (!error && (!assigned || assigned.length === 0)) {
+          return {
+            id: `ai-${Date.now()}`,
+            role: "assistant",
+            content: `${job.reference} has changed status and was not reassigned.`,
+            timestamp: now,
+          };
+        }
         if (error) {
           return {
             id: `ai-${Date.now()}`,
@@ -454,12 +474,20 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
     async (action: AIAction) => {
       if (action.type === "assign_driver") {
         if (action.payload.driverId) {
-          const { error } = await supabase
+          // Only jobs not yet started can be (re)assigned; never reopen a closed job.
+          const { data: assigned, error } = await supabase
             .from("jobs")
             .update({ driver_id: action.payload.driverId, status: "assigned" })
-            .eq("id", action.payload.jobId);
+            .eq("id", action.payload.jobId)
+            .in("status", ["pending", "assigned"])
+            .select("id");
           if (error) {
             toast.error(`Failed: ${error.message}`);
+            return;
+          }
+          if (!assigned || assigned.length === 0) {
+            toast.error(`${action.payload.jobRef} is no longer pending or assigned and was not reassigned.`);
+            refetchJobs();
             return;
           }
           refetchJobs();

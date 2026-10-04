@@ -16,9 +16,10 @@ import { Plus, Search, Filter, Edit, Trash2, ArrowUpDown, Download, RefreshCw, L
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useJobs, useVehicles, useDrivers } from "@/hooks/useSupabaseData";
-import type { Job, GeofenceEvent } from "@/lib/database.types";
+import type { Job, GeofenceEvent, Json } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 import { tomtomGeocode } from "@/components/TomTomMap";
+import { assignmentLocked, changedFields, isJobClosed, jobRuleMessage, mergeStops, startedStopCount, statusOptions, type JobStatus } from "@/lib/jobEditRules";
 
 const statusColors: Record<string, string> = { pending: "bg-amber-500/20 text-amber-500 border-amber-500/30", assigned: "bg-cyan-500/20 text-cyan-500 border-cyan-500/30", in_progress: "bg-blue-500/20 text-blue-500 border-blue-500/30", completed: "bg-green-500/20 text-green-500 border-green-500/30", cancelled: "bg-red-500/20 text-red-500 border-red-500/30" };
 const statusLabels: Record<string, string> = { pending: "Pending", assigned: "Assigned", in_progress: "In Progress", completed: "Completed", cancelled: "Cancelled" };
@@ -32,6 +33,8 @@ interface Stop {
   completed_at?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** The stop exactly as stored (null for a stop added in the form). */
+  original: Record<string, unknown> | null;
 }
 
 // Radix Select forbids an empty-string item value (it throws while rendering),
@@ -49,6 +52,7 @@ function parseStops(value: unknown): Stop[] {
       completed_at: typeof s.completed_at === "string" ? s.completed_at : null,
       lat: typeof s.lat === "number" ? s.lat : null,
       lng: typeof s.lng === "number" ? s.lng : null,
+      original: s,
     }));
 }
 
@@ -70,6 +74,8 @@ function newTrackingToken(): string {
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
+    const rule = jobRuleMessage(err.message);
+    if (rule) return rule;
     const code = "code" in err ? err.code : undefined;
     return code === "23505" ? "That reference is already used by another job" : err.message;
   }
@@ -91,13 +97,14 @@ interface JobFormData {
   scheduled_date: string;
   customer_phone: string;
   driver_notes: string;
+  cancellation_reason: string;
   stops: Stop[];
 }
 
 const defaultForm: JobFormData = {
   reference: "", customer: "", status: "pending", priority: "medium",
   pickup_address: "", delivery_address: "", eta: "", vehicle_id: NONE, driver_id: NONE, scheduled_date: "",
-  customer_phone: "", driver_notes: "", stops: [],
+  customer_phone: "", driver_notes: "", cancellation_reason: "", stops: [],
 };
 
 export default function Jobs() {
@@ -128,34 +135,38 @@ export default function Jobs() {
   });
 
   /**
-   * Geocode every address so server-side geofencing and the map have
-   * coordinates. An address that cannot be located is still saved; the
-   * dispatcher is told which ones will not trigger arrivals.
+   * Geocode addresses so server-side geofencing and the map have coordinates;
+   * on an edit only an address that changed is geocoded again, and stops keep
+   * every stored field (arrival times, location evidence). An address that
+   * cannot be located is still saved; the dispatcher is told which ones will
+   * not trigger arrivals.
    */
-  const buildPayload = async () => {
+  const buildPayload = async (existing?: Job) => {
     if (formData.eta.trim() && !toEtaIso(formData.scheduled_date, formData.eta)) {
       throw new Error("ETA must be a time such as 14:30");
     }
-    const stopsIn = formData.stops.filter((stop) => stop.address.trim());
     const pickup = formData.pickup_address.trim();
     const delivery = formData.delivery_address.trim();
-    const locate = (address: string) => (address ? tomtomGeocode(address) : Promise.resolve(null));
-    const [pickupPos, deliveryPos, ...stopPos] = await Promise.all([
-      locate(pickup), locate(delivery), ...stopsIn.map((stop) => locate(stop.address.trim())),
+    let unlocated = 0;
+    const locate = async (address: string) => {
+      if (!address) return null;
+      const pos = await tomtomGeocode(address);
+      if (!pos) unlocated++;
+      return pos;
+    };
+    const position = (address: string, oldAddress: string | null | undefined, lat: number | null | undefined, lng: number | null | undefined) =>
+      existing && (oldAddress ?? "") === address ? Promise.resolve({ lat: lat ?? null, lng: lng ?? null }) : locate(address);
+    const [pickupPos, deliveryPos, merged] = await Promise.all([
+      position(pickup, existing?.pickup_address, existing?.pickup_lat, existing?.pickup_lng),
+      position(delivery, existing?.delivery_address, existing?.delivery_lat, existing?.delivery_lng),
+      mergeStops(existing?.stops ?? null,
+        formData.stops.map((stop) => ({ label: stop.label, address: stop.address, original: stop.original })),
+        tomtomGeocode),
     ]);
-    const unlocated = [pickup && !pickupPos, delivery && !deliveryPos, ...stopPos.map((p) => !p)]
-      .filter(Boolean).length;
+    unlocated += merged.unlocated;
     if (unlocated > 0) {
       toast.warning(`${unlocated} address${unlocated === 1 ? "" : "es"} could not be located — no arrival alerts for ${unlocated === 1 ? "it" : "them"}.`);
     }
-    const stops = stopsIn.map((stop, i) => ({
-      label: stop.label.trim() || `Stop ${i + 1}`,
-      address: stop.address.trim(),
-      status: stop.status ?? "pending",
-      completed_at: stop.completed_at ?? null,
-      lat: stopPos[i]?.lat ?? null,
-      lng: stopPos[i]?.lng ?? null,
-    }));
     return {
       customer: formData.customer.trim(), status: formData.status, priority: formData.priority,
       pickup_address: pickup || null,
@@ -168,12 +179,22 @@ export default function Jobs() {
       driver_id: formData.driver_id !== NONE ? parseInt(formData.driver_id) : null,
       customer_phone: formData.customer_phone.trim() || null,
       driver_notes: formData.driver_notes.trim() || null,
-      stops: stops.length > 0 ? stops : null,
+      stops: merged.stops.length > 0 ? (merged.stops as Json) : null,
+      ...(formData.status === "cancelled" ? { cancellation_reason: formData.cancellation_reason.trim() || null } : {}),
     };
   };
 
+  /** The same rules the database enforces (jobs_office_guard), checked before saving. */
+  const formProblem = (): string | null => {
+    if (!formData.customer.trim()) return "Customer name is required";
+    if (formData.status === "assigned" && formData.driver_id === NONE) return "Choose a driver before setting the job to Assigned";
+    if (formData.status === "cancelled" && !formData.cancellation_reason.trim()) return "Enter a reason to cancel the job";
+    return null;
+  };
+
   const handleAdd = async () => {
-    if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
+    const problem = formProblem();
+    if (problem) { toast.error(problem); return; }
     setIsSaving(true);
     try {
       const payload = await buildPayload();
@@ -210,11 +231,21 @@ export default function Jobs() {
   };
 
   const handleEdit = async () => {
-    if (!selectedJobId) return;
-    if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
+    const job = jobs.find((j) => j.id === selectedJobId);
+    if (!job || isJobClosed(job.status)) return;
+    const problem = formProblem();
+    if (problem) { toast.error(problem); return; }
     setIsSaving(true);
     try {
-      await update(selectedJobId, { ...(await buildPayload()), reference: formData.reference.trim() });
+      // Send only what changed: unchanged fields (stops above all) are never rewritten.
+      const changes = changedFields(job as unknown as Record<string, unknown>,
+        { ...(await buildPayload(job)), reference: formData.reference.trim() });
+      if (Object.keys(changes).length === 0) {
+        setShowEditModal(false); setSelectedJobId(null); setFormData(defaultForm);
+        toast.info("No changes to save");
+        return;
+      }
+      await update(job.id, changes as Partial<Job>);
       setShowEditModal(false); setSelectedJobId(null); setFormData(defaultForm);
       toast.success("Job updated successfully");
     } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
@@ -260,6 +291,7 @@ export default function Jobs() {
       scheduled_date: job.scheduled_date || "",
       customer_phone: job.customer_phone || "",
       driver_notes: job.driver_notes || "",
+      cancellation_reason: job.cancellation_reason || "",
       stops: parseStops(job.stops),
     });
     setShowEditModal(true);
@@ -279,7 +311,7 @@ export default function Jobs() {
   };
 
   const addStop = () => {
-    setFormData((prev) => ({ ...prev, stops: [...prev.stops, { label: "", address: "", status: "pending" }] }));
+    setFormData((prev) => ({ ...prev, stops: [...prev.stops, { label: "", address: "", status: "pending", original: null }] }));
   };
   const removeStop = (i: number) => {
     setFormData((prev) => ({ ...prev, stops: prev.stops.filter((_, idx) => idx !== i) }));
@@ -307,22 +339,33 @@ export default function Jobs() {
   };
 
   const selectedJob = jobs.find(j => j.id === selectedJobId);
+  // Editing rules for the job open in the edit dialog (null while creating).
+  const editingJob = showEditModal ? selectedJob : undefined;
+  const phase: JobStatus | null = editingJob ? editingJob.status : null;
+  const closed = phase !== null && isJobClosed(phase);
+  const locked = assignmentLocked(phase);
+  const startedStops = editingJob ? startedStopCount(editingJob.stops) : 0;
 
   const renderForm = () => (
-    <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+    <fieldset disabled={closed} className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto min-w-0">
+      {closed && <p className="text-xs text-amber-400">Completed and cancelled jobs are read-only.</p>}
+      {locked && !closed && <p className="text-xs text-muted-foreground">The driver has started this job: driver, vehicle, reference and reached stops cannot change.</p>}
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Reference</Label><Input className="mt-1.5 bg-muted/30" value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} /></div>
+        <div><Label>Reference</Label><Input className="mt-1.5 bg-muted/30" disabled={locked} value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} /></div>
         <div><Label>Customer *</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., Tesco Distribution" value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })} /></div>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as JobFormData["status"] })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="assigned">Assigned</SelectItem><SelectItem value="in_progress">In Progress</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+        <div><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as JobFormData["status"] })}><SelectTrigger className="mt-1.5 bg-muted/30" aria-label="Status"><SelectValue /></SelectTrigger><SelectContent>{statusOptions(phase).map((st) => <SelectItem key={st} value={st} disabled={st === "in_progress"}>{statusLabels[st]}</SelectItem>)}</SelectContent></Select></div>
         <div><Label>Priority</Label><Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v as JobFormData["priority"] })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="urgent">Urgent</SelectItem></SelectContent></Select></div>
       </div>
+      {formData.status === "cancelled" && (
+        <div><Label htmlFor="job-cancel-reason">Cancellation reason *</Label><Textarea id="job-cancel-reason" className="mt-1.5 bg-muted/30" placeholder="Why is this job cancelled?" value={formData.cancellation_reason} onChange={(e) => setFormData({ ...formData, cancellation_reason: e.target.value })} /></div>
+      )}
       <div><Label>Pickup Address</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., London Distribution Centre" value={formData.pickup_address} onChange={(e) => setFormData({ ...formData, pickup_address: e.target.value })} /></div>
       <div><Label>Delivery Address</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., Birmingham Hub" value={formData.delivery_address} onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })} /></div>
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Assign Vehicle</Label><Select value={formData.vehicle_id} onValueChange={(v) => setFormData({ ...formData, vehicle_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select vehicle" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{vehicles.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.vehicle_id} — {v.make} {v.model}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Assign Driver</Label><Select value={formData.driver_id} onValueChange={(v) => setFormData({ ...formData, driver_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select driver" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{drivers.map(d => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label>Assign Vehicle</Label><Select value={formData.vehicle_id} disabled={locked} onValueChange={(v) => setFormData({ ...formData, vehicle_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select vehicle" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{vehicles.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.vehicle_id} — {v.make} {v.model}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label>Assign Driver</Label><Select value={formData.driver_id} disabled={locked} onValueChange={(v) => setFormData({ ...formData, driver_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select driver" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{drivers.map(d => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}</SelectContent></Select></div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div><Label htmlFor="job-date">Scheduled Date</Label><Input id="job-date" type="date" className="mt-1.5 bg-muted/30" value={formData.scheduled_date} onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })} /></div>
@@ -335,17 +378,23 @@ export default function Jobs() {
           <Label className="flex items-center gap-1.5"><ListOrdered className="w-3 h-3" />Extra Stops</Label>
           <Button type="button" variant="outline" size="sm" onClick={addStop}><Plus className="w-3 h-3 mr-1" />Add Stop</Button>
         </div>
-        {formData.stops.map((stop, i) => (
-          <div key={i} className="flex gap-2 mb-2">
-            <Input className="bg-muted/30 w-24 shrink-0" placeholder={`Stop ${i + 1}`} value={stop.label} onChange={(e) => updateStop(i, "label", e.target.value)} />
-            <Input className="bg-muted/30 flex-1" placeholder="Address" value={stop.address} onChange={(e) => updateStop(i, "address", e.target.value)} />
-            <Button type="button" variant="ghost" size="icon" onClick={() => removeStop(i)}><X className="w-4 h-4 text-red-400" /></Button>
-          </div>
-        ))}
+        {formData.stops.map((stop, i) => {
+          // Reached/delivered stops (and any before them) are history: read-only.
+          const started = i < startedStops;
+          return (
+            <div key={i} className="flex gap-2 mb-2 items-center" data-stop-locked={started ? "true" : "false"}>
+              <Input className="bg-muted/30 w-24 shrink-0" placeholder={`Stop ${i + 1}`} value={stop.label} disabled={started} onChange={(e) => updateStop(i, "label", e.target.value)} />
+              <Input className="bg-muted/30 flex-1" placeholder="Address" value={stop.address} disabled={started} onChange={(e) => updateStop(i, "address", e.target.value)} />
+              {started
+                ? <span className="text-xs text-muted-foreground w-20 shrink-0 text-center">{stop.status === "completed" ? "Delivered" : stop.status === "arrived" ? "Arrived" : "Locked"}</span>
+                : <Button type="button" variant="ghost" size="icon" aria-label={`Remove stop ${i + 1}`} onClick={() => removeStop(i)}><X className="w-4 h-4 text-red-400" /></Button>}
+            </div>
+          );
+        })}
         {formData.stops.length === 0 && <p className="text-xs text-muted-foreground">No extra stops (pickup → delivery only)</p>}
       </div>
       <div><Label className="flex items-center gap-1.5"><StickyNote className="w-3 h-3" />Dispatcher Notes for Driver</Label><Textarea className="mt-1.5 bg-muted/30" placeholder="Gate code, access instructions, special requirements..." value={formData.driver_notes} onChange={(e) => setFormData({ ...formData, driver_notes: e.target.value })} rows={2} /></div>
-    </div>
+    </fieldset>
   );
 
   return (
@@ -409,7 +458,7 @@ export default function Jobs() {
         )}
 
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Add New Job</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button><Button onClick={handleAdd} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Create Job</Button></DialogFooter></DialogContent></Dialog>
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Edit Job</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button><Button onClick={handleEdit} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button></DialogFooter></DialogContent></Dialog>
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>{closed ? "Job (read-only)" : "Edit Job"}</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowEditModal(false)}>{closed ? "Close" : "Cancel"}</Button>{!closed && <Button onClick={handleEdit} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button>}</DialogFooter></DialogContent></Dialog>
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}><DialogContent className="bg-card border-border max-w-md"><DialogHeader><DialogTitle>Delete Job</DialogTitle></DialogHeader><p className="text-muted-foreground">Are you sure you want to delete job <strong className="text-foreground">{selectedJob?.reference}</strong>? This action cannot be undone.</p><DialogFooter><Button variant="outline" onClick={() => setShowDeleteModal(false)}>Cancel</Button><Button variant="destructive" onClick={handleDelete} disabled={isSaving}>{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Delete</Button></DialogFooter></DialogContent></Dialog>
 
         {/* ========== JOB DETAIL MODAL ========== */}
@@ -425,6 +474,9 @@ export default function Jobs() {
               <div className="space-y-4 py-2 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-muted/20 rounded-lg p-3"><p className="text-xs text-muted-foreground mb-1">Status</p><span className={`text-xs px-2 py-1 rounded-full border ${statusColors[selectedJob.status] || ""}`}>{statusLabels[selectedJob.status]}</span></div>
+                  {selectedJob.status === "cancelled" && selectedJob.cancellation_reason && (
+                    <div className="bg-muted/20 rounded-lg p-3 col-span-2"><p className="text-xs text-muted-foreground mb-1">Cancellation reason</p><p className="text-sm whitespace-pre-wrap">{selectedJob.cancellation_reason}</p></div>
+                  )}
                   <div className="bg-muted/20 rounded-lg p-3"><p className="text-xs text-muted-foreground mb-1">Priority</p><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[selectedJob.priority] || ""}`}>{priorityLabels[selectedJob.priority]}</span></div>
                 </div>
                 <div className="bg-muted/20 rounded-lg p-3 space-y-2">

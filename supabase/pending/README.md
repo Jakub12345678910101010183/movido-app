@@ -43,3 +43,16 @@ refused; the old entry points keep today's behaviour.
 | `20261001120000_geofence_next_stop_arrival.sql` | `evaluate_geofences` only: a stop reached before the previous one was delivered arrives on the next fresh qualifying point once it is next (point time >= previous delivery), with location evidence |
 | `20261001120500_geofence_next_stop_arrival_rollback.sql` | Restores the production `evaluate_geofences` (hash `1edabe6e`) |
 | `geofence_next_stop_arrival_test.sql` | F1 tests (27) |
+
+# Pending: Office job rules (office_job_guard)
+
+| File | Purpose |
+|---|---|
+| `20261004120000_office_job_guard.sql` | `jobs.cancellation_reason`; `jobs_office_guard` (Office status rules, stop history lock, POD/completed_at read-only); `jobs_office_audit` (audit of successful Office job writes); `pod_photos_delete` policy dropped |
+| `20261004120500_office_job_guard_rollback.sql` | Restores the previous state exactly (catalog compared) |
+| `office_job_guard_test.sql` | Office guard, audit and driver-regression tests (70) |
+
+Applying it also changes two existing assertions to the new rules:
+`tests/jobs_driver_pod_lock.sql` (Office can no longer complete/write POD) and
+`driver_stop_state_machine_stage2_test.sql` (Office can no longer set a stop delivered).
+Deploy the web change (Jobs.tsx, POD.tsx, AIDispatcher.tsx) right after the migration.

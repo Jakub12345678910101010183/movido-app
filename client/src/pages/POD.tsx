@@ -3,24 +3,23 @@
  * Terminal Noir style
  * Features:
  * - View all jobs' POD status (pending/signed/photo/na)
- * - Photo capture & upload (camera or file picker)
- * - Signature pad (canvas-based)
- * - Notes field
- * - Supabase Storage integration for photos
+ * - View the photo, signature and notes the driver recorded
  * - Filter by status, search by reference
+ *
+ * View only: proof of delivery is recorded by the driver when completing the
+ * job (driver_complete_job); the database refuses Office changes to it.
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Camera, FileCheck, Search, Filter, RefreshCw, Loader2,
-  Image, Pen, CheckCircle, Clock, X, Upload, Eye, Package,
+  Pen, Clock, X, Eye, Package,
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,21 +39,9 @@ export default function POD() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [showCaptureModal, setShowCaptureModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
 
-  // Capture state
-  const [captureMode, setCaptureMode] = useState<"photo" | "signature">("photo");
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [podNotes, setPodNotes] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
   const [photoViewUrl, setPhotoViewUrl] = useState<string | null>(null);
-
-  // Signature canvas
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false);
-  const lastPosRef = useRef({ x: 0, y: 0 });
 
   // Filter jobs
   const filtered = jobs.filter((j) => {
@@ -73,141 +60,6 @@ export default function POD() {
     pending: jobs.filter((j) => j.pod_status === "pending").length,
     signed: jobs.filter((j) => j.pod_status === "signed").length,
     photo: jobs.filter((j) => j.pod_status === "photo").length,
-  };
-
-  // ============================================
-  // Photo handling
-  // ============================================
-
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 10 * 1024 * 1024) { toast.error("File too large (max 10MB)"); return; }
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-  };
-
-  // ============================================
-  // Signature canvas
-  // ============================================
-
-  const initCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#0a0a0f";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#00FFD4";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-  }, []);
-
-  useEffect(() => {
-    if (showCaptureModal && captureMode === "signature") {
-      setTimeout(initCanvas, 100);
-    }
-  }, [showCaptureModal, captureMode, initCanvas]);
-
-  const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    if ("touches" in e) {
-      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-    }
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    isDrawingRef.current = true;
-    lastPosRef.current = getCanvasPos(e);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!ctx || !canvas) return;
-    const pos = getCanvasPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    lastPosRef.current = pos;
-  };
-
-  const stopDraw = () => { isDrawingRef.current = false; };
-
-  const clearSignature = () => { initCanvas(); };
-
-  // ============================================
-  // Upload & Save POD
-  // ============================================
-
-  const handleSavePOD = async () => {
-    if (!selectedJob) return;
-    setIsUploading(true);
-
-    try {
-      let photoUrl: string | null = null;
-      let signatureData: string | null = null;
-
-      if (captureMode === "photo" && photoFile) {
-        // Private bucket: objects live under "<organization_id>/<job_id>/" and
-        // storage policies only let the job's own organisation read them. The
-        // job row stores the object path; views use short-lived signed URLs.
-        if (!selectedJob.organization_id) throw new Error("Job has no organisation");
-        const ext = (photoFile.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `${selectedJob.organization_id}/${selectedJob.id}/${Date.now()}.${ext}`;
-
-        const { error } = await supabase.storage
-          .from("pod-photos")
-          .upload(path, photoFile, { contentType: photoFile.type });
-        if (error) throw new Error(`Photo upload failed: ${error.message}`);
-        photoUrl = path;
-      }
-
-      if (captureMode === "signature" && canvasRef.current) {
-        signatureData = canvasRef.current.toDataURL("image/png");
-      }
-
-      // Update job in Supabase
-      const { error: updateError } = await supabase
-        .from("jobs")
-        .update({
-          pod_status: captureMode === "photo" ? "photo" : "signed",
-          pod_photo_url: photoUrl,
-          pod_signature: signatureData,
-          pod_notes: podNotes || null,
-        })
-        .eq("id", selectedJob.id);
-
-      if (updateError) throw updateError;
-
-      toast.success(`POD ${captureMode === "photo" ? "photo" : "signature"} saved for ${selectedJob.reference}`);
-      setShowCaptureModal(false);
-      resetCapture();
-      refetch();
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const resetCapture = () => {
-    setPhotoFile(null);
-    setPhotoPreview(null);
-    setPodNotes("");
-    setCaptureMode("photo");
-  };
-
-  const openCapture = (job: Job) => {
-    setSelectedJob(job);
-    resetCapture();
-    setShowCaptureModal(true);
   };
 
   const openView = (job: Job) => {
@@ -238,7 +90,7 @@ export default function POD() {
           <div>
             <h1 className="text-2xl font-bold">Proof of Delivery</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Digital POD management — photos, signatures & notes
+              Proof recorded by drivers — photos, signatures & notes
             </p>
           </div>
         </div>
@@ -320,9 +172,7 @@ export default function POD() {
                             </Button>
                           )}
                           {job.pod_status === "pending" && (
-                            <Button size="sm" className="glow-cyan-sm" onClick={() => openCapture(job)}>
-                              <Camera className="w-3 h-3 mr-1" />Capture POD
-                            </Button>
+                            <span className="text-xs text-muted-foreground">Recorded by the driver at delivery</span>
                           )}
                         </div>
                       </td>
@@ -338,121 +188,9 @@ export default function POD() {
           <div className="card-terminal p-12 text-center">
             <FileCheck className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No POD records</h3>
-            <p className="text-muted-foreground">Create jobs first, then capture proof of delivery</p>
+            <p className="text-muted-foreground">Proof of delivery appears here when drivers complete jobs</p>
           </div>
         )}
-
-        {/* ========== CAPTURE MODAL ========== */}
-        <Dialog open={showCaptureModal} onOpenChange={setShowCaptureModal}>
-          <DialogContent className="bg-card border-border max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Camera className="w-5 h-5 text-primary" />
-                Capture POD — {selectedJob?.reference}
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {/* Mode Toggle */}
-              <div className="flex gap-2">
-                <Button
-                  variant={captureMode === "photo" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setCaptureMode("photo")}
-                >
-                  <Camera className="w-4 h-4 mr-2" />Photo
-                </Button>
-                <Button
-                  variant={captureMode === "signature" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setCaptureMode("signature")}
-                >
-                  <Pen className="w-4 h-4 mr-2" />Signature
-                </Button>
-              </div>
-
-              {/* Photo Capture */}
-              {captureMode === "photo" && (
-                <div className="space-y-3">
-                  {photoPreview ? (
-                    <div className="relative">
-                      <img src={photoPreview} alt="POD preview" className="w-full rounded-lg border border-border max-h-60 object-cover" />
-                      <Button variant="ghost" size="icon" className="absolute top-2 right-2 bg-black/50" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center h-48 rounded-lg border-2 border-dashed border-border bg-muted/20 cursor-pointer hover:border-primary/50 transition-colors">
-                      <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">Click to upload or take photo</p>
-                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG up to 10MB</p>
-                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
-                    </label>
-                  )}
-                </div>
-              )}
-
-              {/* Signature Capture */}
-              {captureMode === "signature" && (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <canvas
-                      ref={canvasRef}
-                      width={440}
-                      height={200}
-                      className="w-full rounded-lg border border-border cursor-crosshair touch-none"
-                      onMouseDown={startDraw}
-                      onMouseMove={draw}
-                      onMouseUp={stopDraw}
-                      onMouseLeave={stopDraw}
-                      onTouchStart={startDraw}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDraw}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute top-2 right-2 text-xs"
-                      onClick={clearSignature}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center">Draw signature above with mouse or finger</p>
-                </div>
-              )}
-
-              {/* Notes */}
-              <div>
-                <Label>Delivery Notes</Label>
-                <Textarea
-                  className="mt-1.5 bg-muted/30"
-                  placeholder="e.g., Left with reception, signed by John Smith..."
-                  value={podNotes}
-                  onChange={(e) => setPodNotes(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              {/* Job info */}
-              <div className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-3">
-                <p><strong>Customer:</strong> {selectedJob?.customer}</p>
-                <p><strong>Delivery:</strong> {selectedJob?.delivery_address || "No address"}</p>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCaptureModal(false)}>Cancel</Button>
-              <Button
-                onClick={handleSavePOD}
-                disabled={isUploading || (captureMode === "photo" && !photoFile)}
-                className="glow-cyan-sm"
-              >
-                {isUploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</> : <><CheckCircle className="w-4 h-4 mr-2" />Save POD</>}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* ========== VIEW MODAL ========== */}
         <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
