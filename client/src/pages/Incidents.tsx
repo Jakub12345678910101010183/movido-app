@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   AlertTriangle, Search, Filter, RefreshCw, Loader2,
-  CheckCircle, Clock, Eye, Trash2, Car, Package,
+  CheckCircle, Clock, Eye, Car, Package,
   Shield, MapPin, User, Truck, Camera, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -58,7 +58,8 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 // ============================================
 
 export default function Incidents() {
-  const { incidents, isLoading, refetch, updateStatus, remove } = useIncidents();
+  // Incident reports are evidence: the Office can change their status but not delete them.
+  const { incidents, isLoading, refetch, updateStatus } = useIncidents();
   const { drivers } = useDrivers();
   const { jobs } = useJobs();
   const [showLog, setShowLog] = useState(false);
@@ -69,8 +70,6 @@ export default function Incidents() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
 
   // ---- Helpers ----
@@ -110,18 +109,6 @@ export default function Incidents() {
       toast.error(`Failed: ${err.message}`);
     } finally {
       setUpdating(null);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingId) return;
-    try {
-      await remove(deletingId);
-      setShowDeleteModal(false);
-      setDeletingId(null);
-      toast.success("Incident deleted");
-    } catch (err: any) {
-      toast.error(`Failed: ${err.message}`);
     }
   };
 
@@ -345,15 +332,6 @@ export default function Incidents() {
                           <Button variant="outline" size="sm" onClick={() => openView(inc)}>
                             <Eye className="w-3 h-3 mr-1" />View
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="text-red-500 hover:text-red-400 hover:border-red-500/50"
-                            aria-label="Delete incident"
-                            onClick={() => { setDeletingId(inc.id); setShowDeleteModal(true); }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -518,21 +496,6 @@ export default function Incidents() {
           </DialogContent>
         </Dialog>
 
-        {/* ========== DELETE MODAL ========== */}
-        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-          <DialogContent className="bg-card border-border max-w-md">
-            <DialogHeader>
-              <DialogTitle>Delete Incident Report?</DialogTitle>
-            </DialogHeader>
-            <p className="text-muted-foreground text-sm">
-              This action cannot be undone. The incident report will be permanently deleted.
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDelete}>Delete</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );

@@ -17,14 +17,18 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart,
 } from "recharts";
 import { useVehicles, useDrivers, useJobs, useMaintenance } from "@/hooks/useSupabaseData";
+import { jobInRange, vehiclesOnActiveJobs, type TimeRange } from "@/lib/metrics";
 
 const COLORS = ["#00FFD4", "#3B82F6", "#F59E0B", "#8B5CF6", "#EF4444"];
 
 export default function Analytics() {
-  const [timeRange, setTimeRange] = useState("week");
+  const [timeRange, setTimeRange] = useState<TimeRange>("week");
   const { vehicles, isLoading: vLoading } = useVehicles();
   const { drivers, isLoading: dLoading } = useDrivers();
-  const { jobs, isLoading: jLoading, refetch } = useJobs();
+  const { jobs: allJobs, isLoading: jLoading, refetch } = useJobs();
+  // Job figures follow the selected period (completed jobs by completion time,
+  // others by creation time). Vehicle figures describe the fleet now.
+  const jobs = useMemo(() => allJobs.filter((j) => jobInRange(j, timeRange)), [allJobs, timeRange]);
   const { maintenance } = useMaintenance();
 
   const isLoading = vLoading || dLoading || jLoading;
@@ -34,7 +38,8 @@ export default function Analytics() {
   // ============================================
 
   const kpis = useMemo(() => {
-    const activeVehicles = vehicles.filter((v) => v.status === "active").length;
+    // Measured: vehicles on a job in progress now (vehicle status is set by hand).
+    const activeVehicles = vehiclesOnActiveJobs(allJobs);
     const utilization = vehicles.length > 0 ? Math.round((activeVehicles / vehicles.length) * 100) : 0;
     const avgFuel = vehicles.length > 0 ? Math.round(vehicles.reduce((s, v) => s + (v.fuel_level || 0), 0) / vehicles.length) : 0;
     const completedJobs = jobs.filter((j) => j.status === "completed").length;
@@ -47,7 +52,7 @@ export default function Analytics() {
     const totalMileage = vehicles.reduce((s, v) => s + (v.mileage || 0), 0);
 
     return { utilization, avgFuel, onTimeRate, totalMileage, completedJobs, totalJobs, activeVehicles };
-  }, [vehicles, jobs]);
+  }, [vehicles, jobs, allJobs]);
 
   // ============================================
   // Chart Data (computed from real data)
@@ -134,9 +139,9 @@ export default function Analytics() {
         <div className="flex items-center justify-between mb-6">
           <div><h1 className="text-2xl font-bold">Fleet Analytics</h1><p className="text-sm text-muted-foreground mt-1">Calculated from your jobs, vehicles and maintenance records</p></div>
           <div className="flex items-center gap-3">
-            <Select value={timeRange} onValueChange={setTimeRange}>
+            <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
               <SelectTrigger className="w-44 bg-muted/30" aria-label="Period"><Calendar className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="day">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="month">This Month</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="day">Today</SelectItem><SelectItem value="week">Last 7 days</SelectItem><SelectItem value="month">Last 30 days</SelectItem></SelectContent>
             </Select>
             <Button variant="outline" size="icon" aria-label="Refresh" onClick={() => refetch()}><RefreshCw className="w-4 h-4" /></Button>
           </div>
@@ -146,15 +151,15 @@ export default function Analytics() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card-terminal p-4">
             <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Fleet Utilization</span>
-              <div className="flex items-center gap-1 text-green-500 text-xs"><ArrowUpRight className="w-3 h-3" />{kpis.activeVehicles} active</div>
+              <div className="flex items-center gap-1 text-green-500 text-xs"><ArrowUpRight className="w-3 h-3" />{kpis.activeVehicles} on jobs now</div>
             </div>
             <p className="text-2xl font-mono font-bold text-cyan">{kpis.utilization}%</p>
-            <p className="text-xs text-muted-foreground mt-1">{kpis.activeVehicles}/{vehicles.length} vehicles</p>
+            <p className="text-xs text-muted-foreground mt-1">{kpis.activeVehicles}/{vehicles.length} vehicles on an in-progress job</p>
           </div>
           <div className="card-terminal p-4">
-            <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Avg Fuel Level</span></div>
+            <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Recorded Fuel Level</span></div>
             <p className={`text-2xl font-mono font-bold ${kpis.avgFuel < 30 ? "text-red-500" : "text-cyan"}`}>{kpis.avgFuel}%</p>
-            <p className="text-xs text-muted-foreground mt-1">Fleet average</p>
+            <p className="text-xs text-muted-foreground mt-1">Average entered on vehicle records, not measured</p>
           </div>
           <div className="card-terminal p-4">
             <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Completed Jobs</span></div>
@@ -162,9 +167,9 @@ export default function Analytics() {
             <p className="text-xs text-muted-foreground mt-1">of {kpis.totalJobs} total · on time {kpis.onTimeRate === null ? "—" : `${kpis.onTimeRate}%`}</p>
           </div>
           <div className="card-terminal p-4">
-            <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Total Mileage</span></div>
+            <div className="flex items-center justify-between mb-2"><span className="text-xs text-muted-foreground">Recorded Mileage</span></div>
             <p className="text-2xl font-mono font-bold text-cyan">{(kpis.totalMileage / 1000).toFixed(1)}k</p>
-            <p className="text-xs text-muted-foreground mt-1">miles across fleet</p>
+            <p className="text-xs text-muted-foreground mt-1">miles entered on vehicle records</p>
           </div>
         </div>
 
@@ -188,7 +193,7 @@ export default function Analytics() {
 
           {/* Fuel Levels per Vehicle */}
           <div className="card-terminal p-4">
-            <h3 className="font-semibold mb-4">Vehicle Fuel Levels</h3>
+            <h3 className="font-semibold mb-4">Recorded Fuel Levels (vehicle records)</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={fuelLevels}>
@@ -279,8 +284,8 @@ export default function Analytics() {
                 <th className="text-left p-3 text-xs font-semibold text-muted-foreground">#</th>
                 <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Driver</th>
                 <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Deliveries</th>
-                <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Rating</th>
-                <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Hours Today</th>
+                <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Rating (recorded)</th>
+                <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Hours Today (recorded)</th>
                 <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Status</th>
                 <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Performance</th>
               </tr></thead>

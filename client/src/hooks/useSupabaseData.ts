@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { LIVE_POSITION_MAX_AGE_MS } from "@/lib/livePosition";
+import { pollWhileDown } from "@/lib/realtimeFallback";
 import type {
   Database,
   Vehicle, Driver, Job, FleetMaintenance, Incident, FuelLog, Message,
@@ -29,6 +30,7 @@ async function deleteOrExplain(table: "vehicles" | "drivers" | "jobs", id: numbe
 // ============================================
 
 type TableName = keyof Database["public"]["Tables"];
+
 
 function useRealtimeTable<T extends { id: number | string }>(
   table: TableName,
@@ -64,6 +66,7 @@ function useRealtimeTable<T extends { id: number | string }>(
   useEffect(() => {
     fetch();
 
+    const fallback = pollWhileDown(fetch);
     // Subscribe to realtime changes
     const channel = supabase
       .channel(`${table}-changes`)
@@ -86,9 +89,17 @@ function useRealtimeTable<T extends { id: number | string }>(
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Changes made while the channel was down are never replayed: reload on
+        // reconnect, and poll until instant updates are back.
+        const live = status === "SUBSCRIBED";
+        if (live && fallback.wasDown) void fetch();
+        fallback.wasDown = !live;
+        fallback.set(!live);
+      });
 
     return () => {
+      fallback.stop();
       supabase.removeChannel(channel);
     };
   }, [table, fetch]);
@@ -393,12 +404,9 @@ export function useIncidents() {
     if (err) throw err;
   }, []);
 
-  const remove = useCallback(async (id: number) => {
-    const { error: err } = await supabase.from("incidents").delete().eq("id", id);
-    if (err) throw err;
-  }, []);
 
-  return { incidents: data, isLoading, error, refetch, updateStatus, remove };
+  // No delete: incident reports are driver evidence.
+  return { incidents: data, isLoading, error, refetch, updateStatus };
 }
 
 // ============================================
@@ -435,14 +443,20 @@ export function useFuelLogs(driverId?: number) {
   useEffect(() => {
     fetch();
 
+    const fallback = pollWhileDown(fetch);
     const channel = supabase
       .channel("fuel-logs-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "fuel_logs" }, () => {
         fetch();
       })
-      .subscribe();
+      .subscribe((status) => {
+        const live = status === "SUBSCRIBED";
+        if (live && fallback.wasDown) void fetch();
+        fallback.wasDown = !live;
+        fallback.set(!live);
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { fallback.stop(); supabase.removeChannel(channel); };
   }, [fetch]);
 
   // Aggregates

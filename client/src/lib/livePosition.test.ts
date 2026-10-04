@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIVE_POSITION_MAX_AGE_MS, isLivePosition, liveVehicles, positionAge } from "./livePosition";
+import { LIVE_POSITION_MAX_AGE_MS, STALE_POSITION_MS, isLivePosition, isStalePosition, liveVehicles, positionAge } from "./livePosition";
 
 const NOW = Date.parse("2026-09-28T09:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -43,5 +43,14 @@ describe("positionAge", () => {
     expect(positionAge(ago(25 * 60_000), NOW)).toBe("25 min ago");
     expect(positionAge(ago(3 * 3600 * 1000), NOW)).toBe("3 h ago");
     expect(positionAge(null, NOW)).toBe("time unknown");
+  });
+});
+
+describe("isStalePosition", () => {
+  it("marks a position older than 15 minutes, or missing, as stale", () => {
+    expect(isStalePosition(ago(60_000), NOW)).toBe(false);
+    expect(isStalePosition(ago(STALE_POSITION_MS + 1000), NOW)).toBe(true);
+    expect(isStalePosition(null, NOW)).toBe(true);
+    expect(isStalePosition("not a date", NOW)).toBe(true);
   });
 });

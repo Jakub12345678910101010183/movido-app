@@ -11,6 +11,19 @@ export function isLivePosition(iso: string | null | undefined, now: number = Dat
   return Number.isFinite(t) && now - t <= LIVE_POSITION_MAX_AGE_MS;
 }
 
+/**
+ * A position older than this is shown as the last known position, not as
+ * where the vehicle is now (drivers report about once a minute while moving).
+ */
+export const STALE_POSITION_MS = 15 * 60 * 1000;
+
+/** True when a position is missing or older than STALE_POSITION_MS. */
+export function isStalePosition(iso: string | null | undefined, now: number = Date.now()): boolean {
+  if (!iso) return true;
+  const t = new Date(iso).getTime();
+  return !Number.isFinite(t) || now - t > STALE_POSITION_MS;
+}
+
 export function positionAge(iso: string | null | undefined, now: number = Date.now()): string {
   if (!iso) return "time unknown";
   const mins = Math.round((now - new Date(iso).getTime()) / 60000);

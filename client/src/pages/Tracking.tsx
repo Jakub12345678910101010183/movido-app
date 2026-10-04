@@ -20,6 +20,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { TomTomMap, type MapMarker, type MapRoute } from "@/components/TomTomMap";
 import { escapeHtml } from "@/lib/html";
+import { isStalePosition, positionAge } from "@/lib/livePosition";
 
 interface TrackingData {
   job: {
@@ -39,6 +40,8 @@ interface TrackingData {
     location_lat: number | null;
     location_lng: number | null;
     heading: number | null;
+    /** When the driver's phone reported this position (not when the page loaded). */
+    location_updated_at: string | null;
   } | null;
   vehicle: {
     vehicle_id: string;
@@ -100,6 +103,7 @@ export default function TrackingPage() {
               location_lat: row.driver_location_lat,
               location_lng: row.driver_location_lng,
               heading: row.driver_heading,
+              location_updated_at: row.driver_location_updated_at,
             }
           : null,
         vehicle: row.vehicle_id
@@ -143,12 +147,13 @@ export default function TrackingPage() {
       });
     }
 
-    // Driver location
+    // Driver location: an old position is drawn grey and labelled as the last known one.
     if (data.driver?.location_lat && data.driver?.location_lng) {
+      const stale = isStalePosition(data.driver.location_updated_at);
       markers.push({
         id: "driver", lat: data.driver.location_lat, lng: data.driver.location_lng,
-        type: "vehicle", heading: data.driver.heading || 0,
-        popup: `<strong>${escapeHtml(data.driver.name)}</strong><br/>${escapeHtml(data.vehicle?.registration)}`,
+        type: "vehicle", heading: data.driver.heading || 0, stale,
+        popup: `<strong>${escapeHtml(data.driver.name)}</strong><br/>${escapeHtml(data.vehicle?.registration)}<br/>${stale ? "Last known position" : "Position"} ${positionAge(data.driver.location_updated_at)}`,
       });
     }
 
@@ -215,7 +220,7 @@ export default function TrackingPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <RefreshCw className="w-3 h-3" />
-            Updated {lastUpdate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            Page refreshed {lastUpdate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
       </div>
@@ -240,6 +245,21 @@ export default function TrackingPage() {
             <p className="text-xl font-bold text-green-400">Delivered</p>
             <p className="text-sm text-gray-400 mt-1">Your delivery has been completed</p>
           </div>
+        )}
+
+        {/* Driver position freshness: the time the phone reported it, not the page refresh */}
+        {data.job.status === "in_progress" && data.driver && (
+          data.driver.location_lat && data.driver.location_lng ? (
+            isStalePosition(data.driver.location_updated_at) ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-sm text-amber-300">
+                Live location unavailable. The map shows the last known position, reported {positionAge(data.driver.location_updated_at)}.
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Driver position reported {positionAge(data.driver.location_updated_at)}.</p>
+            )
+          ) : (
+            <p className="text-xs text-gray-500">The driver's location is not available yet.</p>
+          )
         )}
 
         {/* Map */}

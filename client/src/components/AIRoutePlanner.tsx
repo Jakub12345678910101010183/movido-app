@@ -134,6 +134,8 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
   const [waypointType, setWaypointType] = useState<"pickup" | "delivery" | "waypoint">("delivery");
   const [vehicleHeight, setVehicleHeight] = useState(4.95);
   const [vehicleWeight, setVehicleWeight] = useState(44);
+  const [vehicleWidth, setVehicleWidth] = useState(2.55);   // metres, UK maximum
+  const [vehicleLength, setVehicleLength] = useState(16.5); // metres, UK articulated maximum
   const [customerName, setCustomerName] = useState("");
 
   /** Hand the optimised stop order to a navigation app (Google Maps directions). */
@@ -247,7 +249,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
 
           routeResult = await tomtomCalculateRoute(
             ordered.map((w) => ({ lat: w.lat, lng: w.lng })),
-            { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, traffic: true }
+            { travelMode: "truck", vehicleHeight, vehicleWeight: vehicleWeight * 1000, vehicleWidth, vehicleLength, traffic: true }
           );
           break;
         } catch (err: any) {
@@ -297,7 +299,7 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
       console.error("[AIRoutePlanner] Optimize error:", err);
       toast.error("Failed to optimize route. Please try again in a moment.");
     } finally { setIsOptimizing(false); }
-  }, [waypoints, vehicleHeight, vehicleWeight]);
+  }, [waypoints, vehicleHeight, vehicleWeight, vehicleWidth, vehicleLength]);
 
   // ============================================
   // Save Job (Supabase)
@@ -543,6 +545,16 @@ export function AIRoutePlanner({ open, onClose, onSaveJob }: AIRoutePlannerProps
               <div>
                 <Label style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Weight (t)</Label>
                 <Input type="number" step="1" value={vehicleWeight} onChange={(e) => setVehicleWeight(parseFloat(e.target.value) || 44)}
+                  className="h-8 mt-1 bg-white/5 border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <Label style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Width (m)</Label>
+                <Input type="number" step="0.01" value={vehicleWidth} onChange={(e) => setVehicleWidth(parseFloat(e.target.value) || 2.55)}
+                  className="h-8 mt-1 bg-white/5 border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <Label style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>Length (m)</Label>
+                <Input type="number" step="0.1" value={vehicleLength} onChange={(e) => setVehicleLength(parseFloat(e.target.value) || 16.5)}
                   className="h-8 mt-1 bg-white/5 border-white/10 text-white text-sm" />
               </div>
             </div>

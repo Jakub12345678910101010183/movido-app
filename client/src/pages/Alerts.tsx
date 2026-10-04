@@ -78,8 +78,8 @@ export default function Alerts() {
       result.push({
         id: `fuel-${v.id}`, type: "fuel",
         severity: (v.fuel_level || 0) < 10 ? "critical" : "warning",
-        title: `Low Fuel: ${v.vehicle_id}`,
-        details: `${v.make} ${v.model} has ${v.fuel_level}% fuel remaining`,
+        title: `Low Fuel (recorded level): ${v.vehicle_id}`,
+        details: `${v.make} ${v.model}: fuel level entered on the vehicle record is ${v.fuel_level}%`,
         entity: v.vehicle_id, timestamp: now, dismissed: false,
       });
     });
@@ -114,8 +114,8 @@ export default function Alerts() {
       result.push({
         id: `hours-${d.id}`, type: "hours",
         severity: (d.hours_today || 0) > 10 ? "critical" : "warning",
-        title: `Hours Limit: ${d.name}`,
-        details: `${d.hours_today}h today — EU daily driving limit is 9h (max 10h twice/week)`,
+        title: `Hours Limit (recorded hours): ${d.name}`,
+        details: `${d.hours_today}h recorded today — EU daily driving limit is 9h (max 10h twice/week)`,
         entity: d.name, timestamp: now, dismissed: false,
       });
     });

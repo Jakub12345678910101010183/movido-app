@@ -598,8 +598,11 @@ function PodCapture({ job, onDone, onCancel }: { job: Job; onDone: () => Promise
       const signature = hasSignature ? canvasRef.current?.toDataURL("image/png") ?? null : null;
       // The server stores "Received by: <recipient>" + notes, checks the photo
       // belongs to this job and completes the job.
+      // Where the proof was captured, when the browser can tell (optional on the server).
+      const fix = await currentFix();
       const result = await completeDelivery(supabase as unknown as RpcClient, {
         jobId: job.id, photoPath, signature, recipient, notes, capturedAt: new Date().toISOString(),
+        lat: fix?.lat ?? null, lng: fix?.lng ?? null,
       });
       if (!result.ok) throw new Error(result.message);
       toast.success("Delivery completed");

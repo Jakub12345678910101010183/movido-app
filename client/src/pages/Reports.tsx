@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useVehicles, useDrivers, useJobs, useMaintenance, useIncidents, useFuelLogs } from "@/hooks/useSupabaseData";
+import { completedByDriver, toCSV } from "@/lib/metrics";
 
 interface GeneratedReport {
   id: string;
@@ -29,14 +30,14 @@ interface GeneratedReport {
 
 const reportTypes = [
   { value: "fleet", label: "Fleet Overview", icon: Truck, desc: "All vehicles with status, fuel, mileage" },
-  { value: "drivers", label: "Driver Performance", icon: Users, desc: "Drivers with ratings, hours, deliveries" },
+  { value: "drivers", label: "Driver Performance", icon: Users, desc: "Completed jobs per driver, with recorded rating and hours" },
   { value: "jobs", label: "Jobs Summary", icon: Package, desc: "All jobs with status, POD, addresses" },
   { value: "maintenance", label: "Maintenance Log", icon: Wrench, desc: "Service history and upcoming work" },
   { value: "pod", label: "POD Status", icon: Check, desc: "Proof of delivery completion rates" },
-  { value: "fuel", label: "Fuel Analysis", icon: BarChart3, desc: "Vehicle fuel levels and efficiency" },
+  { value: "fuel", label: "Fuel Analysis", icon: BarChart3, desc: "Fuel levels as recorded on vehicle records" },
   { value: "fuel_logs", label: "Fuel Logs", icon: Fuel, desc: "Driver fuel fill-ups with cost and litres" },
   { value: "incidents", label: "Incident Reports", icon: ShieldAlert, desc: "All incidents by type, status, driver" },
-  { value: "wtd", label: "WTD Summary", icon: Shield, desc: "Driver working hours compliance snapshot" },
+  { value: "wtd", label: "WTD Summary", icon: Shield, desc: "Recorded working hours (no tachograph data)" },
 ];
 
 const typeColors: Record<string, string> = {
@@ -51,10 +52,6 @@ const typeColors: Record<string, string> = {
   wtd: "bg-teal-500/20 text-teal-400",
 };
 
-function toCSV(headers: string[], rows: string[][]): string {
-  const escape = (v: string) => `"${(v || "").replace(/"/g, '""')}"`;
-  return [headers.map(escape).join(","), ...rows.map((r) => r.map(escape).join(","))].join("\n");
-}
 
 export default function Reports() {
   const [reports, setReports] = useState<GeneratedReport[]>([]);
@@ -93,7 +90,7 @@ export default function Reports() {
 
     switch (selectedType) {
       case "fleet": {
-        const headers = ["Vehicle ID", "Make", "Model", "Registration", "Type", "Status", "Fuel Level %", "Mileage", "Height (m)", "Weight (t)"];
+        const headers = ["Vehicle ID", "Make", "Model", "Registration", "Type", "Status (set manually)", "Fuel Level % (recorded)", "Mileage (recorded)", "Height (m)", "Weight (t)"];
         const data = vehicles.map((v) => [
           v.vehicle_id, v.make || "", v.model || "", v.registration || "", v.type || "",
           v.status, String(v.fuel_level || 0), String(v.mileage || 0),
@@ -104,11 +101,14 @@ export default function Reports() {
         break;
       }
       case "drivers": {
-        const headers = ["Name", "Email", "Phone", "License Type", "Status", "Rating", "Hours Today", "Hours Week", "Total Deliveries"];
+        // Deliveries are counted from completed jobs; rating and hours are
+        // whatever was entered on the driver record (nothing measures them).
+        const headers = ["Name", "Email", "Phone", "License Type", "Status", "Rating (recorded)", "Hours Today (recorded)", "Hours Week (recorded)", "Completed Jobs"];
+        const completed = completedByDriver(jobs);
         const data = drivers.map((d) => [
           d.name, d.email || "", d.phone || "", d.license_type || "",
           d.status, String(d.rating || 0), String(d.hours_today || 0),
-          String(d.hours_week || 0), String(d.total_deliveries || 0),
+          String(d.hours_week || 0), String(completed.get(d.id) ?? 0),
         ]);
         csvData = toCSV(headers, data);
         rows = data.length;
@@ -153,7 +153,7 @@ export default function Reports() {
         break;
       }
       case "fuel": {
-        const headers = ["Vehicle ID", "Make", "Model", "Fuel Level %", "Mileage", "Status", "Low Fuel Alert"];
+        const headers = ["Vehicle ID", "Make", "Model", "Fuel Level % (recorded)", "Mileage (recorded)", "Status (set manually)", "Low Fuel Alert (recorded level)"];
         const data = vehicles.map((v) => [
           v.vehicle_id, v.make || "", v.model || "",
           String(v.fuel_level || 0), String(v.mileage || 0),
@@ -204,7 +204,7 @@ export default function Reports() {
         break;
       }
       case "wtd": {
-        const headers = ["Driver", "Status", "Today Drive (h)", "Week Drive (h)", "Remaining Daily (h)", "Remaining Weekly (h)", "Compliance", "Violations"];
+        const headers = ["Driver", "Status", "Today Drive (h, recorded)", "Week Drive (h, recorded)", "Remaining Daily (h)", "Remaining Weekly (h)", "Compliance", "Violations"];
         const data = drivers.map((d) => {
           // Recorded hours only; MOViDO has no tachograph feed.
           const todayH = Number(d.hours_today ?? 0);

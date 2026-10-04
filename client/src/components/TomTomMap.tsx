@@ -80,6 +80,8 @@ export interface MapMarker {
   status?: string;
   popup?: string;
   heading?: number;
+  /** Last known position, too old to show as current (drawn grey). */
+  stale?: boolean;
 }
 
 export interface MapRoute {
@@ -102,6 +104,8 @@ interface TomTomMapProps {
   onMapClick?: (lat: number, lng: number) => void;
 }
 
+const STALE_MARKER_COLOR = "#6B7280"; // Grey - last known position, not current
+
 // Marker colors by type
 const MARKER_COLORS: Record<string, string> = {
   vehicle: "#00FFD4",   // Cyan - active vehicles
@@ -118,7 +122,7 @@ const MARKER_COLORS: Record<string, string> = {
  */
 function createMarkerElement(marker: MapMarker): HTMLElement {
   const el = document.createElement("div");
-  const color = MARKER_COLORS[marker.type || "waypoint"] || "#00FFD4";
+  const color = marker.stale ? STALE_MARKER_COLOR : MARKER_COLORS[marker.type || "waypoint"] || "#00FFD4";
 
   if (marker.type === "vehicle") {
     el.innerHTML = `
@@ -477,6 +481,22 @@ export async function tomtomGeocode(query: string): Promise<{
 }
 
 /**
+ * HGV query parameters for TomTom routing: travelMode=truck plus each vehicle
+ * dimension that is set (height, width, length in metres; weight in kg).
+ */
+export function truckRouteParams(options?: {
+  travelMode?: "car" | "truck"; vehicleHeight?: number; vehicleWeight?: number; vehicleWidth?: number; vehicleLength?: number;
+}): string {
+  if (!(options?.travelMode === "truck" || options?.vehicleHeight || options?.vehicleWeight)) return "";
+  let q = "&travelMode=truck";
+  if (options.vehicleHeight) q += `&vehicleHeight=${options.vehicleHeight}`;
+  if (options.vehicleWeight) q += `&vehicleWeight=${options.vehicleWeight}`;
+  if (options.vehicleWidth) q += `&vehicleWidth=${options.vehicleWidth}`;
+  if (options.vehicleLength) q += `&vehicleLength=${options.vehicleLength}`;
+  return q;
+}
+
+/**
  * Calculate route using TomTom Routing API with HGV support
  */
 export async function tomtomCalculateRoute(
@@ -485,6 +505,7 @@ export async function tomtomCalculateRoute(
     vehicleHeight?: number; // metres
     vehicleWeight?: number; // kg
     vehicleWidth?: number;  // metres
+    vehicleLength?: number; // metres
     travelMode?: "car" | "truck";
     traffic?: boolean;
     avoid?: string[];
@@ -505,13 +526,7 @@ export async function tomtomCalculateRoute(
     const locations = waypoints.map(w => `${w.lat},${w.lng}`).join(":");
     let url = `https://api.tomtom.com/routing/1/calculateRoute/${locations}/json?key=${TOMTOM_API_KEY}&routeType=fastest&traffic=${options?.traffic !== false}`;
 
-    // HGV-specific parameters (TomTom API uses vehicleHeight in metres, vehicleWeight in kg)
-    if (options?.travelMode === "truck" || options?.vehicleHeight || options?.vehicleWeight) {
-      url += `&travelMode=truck`;
-      if (options?.vehicleHeight) url += `&vehicleHeight=${options.vehicleHeight}`;
-      if (options?.vehicleWeight) url += `&vehicleWeight=${options.vehicleWeight}`;
-      if (options?.vehicleWidth) url += `&vehicleWidth=${options.vehicleWidth}`;
-    }
+    url += truckRouteParams(options);
 
     if (options?.avoid?.length) {
       url += `&avoid=${options.avoid.join(",")}`;
