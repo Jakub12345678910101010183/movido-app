@@ -9,13 +9,15 @@
 // subscription — and is the only authoritative source of plan/plan_status.
 // The organisation is resolved from metadata set by create-checkout-session,
 // falling back to the stored Stripe customer id. The plan is derived from the
-// configured price ids, never from the price id's spelling.
+// configured price ids, never from the price id's spelling. Event handling is
+// in handler.ts: a failed database read or write answers 500 so Stripe retries.
 //
 // Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY,
 //          STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_{STARTER,PRO}_{MONTHLY,ANNUAL}
 
 import Stripe from "https://esm.sh/stripe@14.0.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { processEvent } from "./handler.ts";
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
@@ -33,18 +35,6 @@ function planForPrice(priceId: string | undefined): "starter" | "professional" |
   if (starter.includes(priceId)) return "starter";
   if (pro.includes(priceId)) return "professional";
   return null;
-}
-
-function planStatus(status: Stripe.Subscription.Status): string {
-  switch (status) {
-    case "trialing": return "trial";
-    case "active": return "active";
-    case "past_due":
-    case "incomplete": return "past_due";
-    // Stripe has stopped retrying: restricted, like cancelled (my_org_has_access).
-    case "unpaid": return "unpaid";
-    default: return "cancelled"; // canceled, incomplete_expired, paused
-  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -74,83 +64,12 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  async function resolveOrg(metadataOrg: string | null | undefined, customerId: string | null): Promise<string | null> {
-    if (metadataOrg) {
-      const { data } = await admin.from("organizations").select("id").eq("id", metadataOrg).maybeSingle();
-      if (data) return data.id;
-    }
-    if (customerId) {
-      const { data } = await admin.from("organizations").select("id").eq("stripe_customer_id", customerId).maybeSingle();
-      if (data) return data.id;
-    }
-    return null;
-  }
-
-  async function applySubscription(sub: Stripe.Subscription, orgHint?: string | null) {
-    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-    const orgId = await resolveOrg(sub.metadata?.organization_id ?? orgHint, customerId);
-    if (!orgId) {
-      console.error("org_not_found", event.type);
-      return;
-    }
-    const item = sub.items.data[0];
-    const update: Record<string, unknown> = {
-      stripe_customer_id: customerId,
-      plan_status: planStatus(sub.status),
-      updated_at: new Date().toISOString(),
-    };
-    const plan = planForPrice(item?.price?.id);
-    if (plan) update.plan = plan;
-    if (item?.quantity) update.max_vehicles = item.quantity;
-    if (sub.status === "trialing" && sub.trial_end) {
-      update.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
-    }
-    const { error } = await admin.from("organizations").update(update).eq("id", orgId);
-    if (error) throw new Error(`organization update failed: ${error.message}`);
-    await admin.from("audit_log").insert({
-      action: `billing.${event.type}`,
-      resource_type: "organization",
-      resource_id: orgId,
-      changes: { plan: update.plan ?? null, plan_status: update.plan_status, quantity: item?.quantity ?? null },
-    });
-  }
-
-  try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        if (session.mode === "subscription" && session.subscription) {
-          const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-          const sub = await stripe.subscriptions.retrieve(subId);
-          await applySubscription(sub, session.client_reference_id ?? session.metadata?.organization_id);
-        }
-        break;
-      }
-      case "customer.subscription.created":
-      case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
-        // Events can arrive out of order; the current subscription is authoritative.
-        const snapshot = event.data.object as Stripe.Subscription;
-        await applySubscription(await stripe.subscriptions.retrieve(snapshot.id));
-        break;
-      }
-      case "invoice.paid":
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        if (invoice.subscription) {
-          const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
-          await applySubscription(await stripe.subscriptions.retrieve(subId));
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  } catch (err) {
-    // 500 makes Stripe retry the event later.
-    console.error("webhook_handler_failed", event.type, err instanceof Error ? err.message : "unknown");
-    return respond(500, { error: "HANDLER_FAILED" });
-  }
-
-  return respond(200, { received: true });
+  const result = await processEvent(event, {
+    db: admin,
+    retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+    planForPrice,
+    now: () => new Date(),
+    log: (...args) => console.error(...args),
+  });
+  return respond(result.status, result.body);
 });
