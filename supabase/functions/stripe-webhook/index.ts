@@ -16,6 +16,7 @@
 
 import Stripe from "https://esm.sh/stripe@14.0.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { entitlementUpdate } from "./entitlement.ts";
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
@@ -33,18 +34,6 @@ function planForPrice(priceId: string | undefined): "starter" | "professional" |
   if (starter.includes(priceId)) return "starter";
   if (pro.includes(priceId)) return "professional";
   return null;
-}
-
-function planStatus(status: Stripe.Subscription.Status): string {
-  switch (status) {
-    case "trialing": return "trial";
-    case "active": return "active";
-    case "past_due":
-    case "incomplete": return "past_due";
-    // Stripe has stopped retrying: restricted, like cancelled (my_org_has_access).
-    case "unpaid": return "unpaid";
-    default: return "cancelled"; // canceled, incomplete_expired, paused
-  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -94,24 +83,22 @@ Deno.serve(async (req: Request) => {
       return;
     }
     const item = sub.items.data[0];
-    const update: Record<string, unknown> = {
-      stripe_customer_id: customerId,
-      plan_status: planStatus(sub.status),
-      updated_at: new Date().toISOString(),
-    };
-    const plan = planForPrice(item?.price?.id);
-    if (plan) update.plan = plan;
-    if (item?.quantity) update.max_vehicles = item.quantity;
-    if (sub.status === "trialing" && sub.trial_end) {
-      update.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
-    }
+    // incomplete / incomplete_expired (first payment not made) only link the customer.
+    const update = entitlementUpdate({
+      status: sub.status,
+      customerId,
+      plan: planForPrice(item?.price?.id),
+      quantity: item?.quantity,
+      trialEnd: sub.trial_end,
+      now: new Date(),
+    });
     const { error } = await admin.from("organizations").update(update).eq("id", orgId);
     if (error) throw new Error(`organization update failed: ${error.message}`);
     await admin.from("audit_log").insert({
       action: `billing.${event.type}`,
       resource_type: "organization",
       resource_id: orgId,
-      changes: { plan: update.plan ?? null, plan_status: update.plan_status, quantity: item?.quantity ?? null },
+      changes: { plan: update.plan ?? null, plan_status: update.plan_status ?? null, quantity: item?.quantity ?? null, stripe_status: sub.status },
     });
   }
 
