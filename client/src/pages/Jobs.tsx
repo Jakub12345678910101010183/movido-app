@@ -71,6 +71,9 @@ function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
     const code = "code" in err ? err.code : undefined;
+    if (err.message.includes("jobs_one_in_progress_per_driver") || err.message.includes("ANOTHER_JOB_IN_PROGRESS")) {
+      return "This driver already has a job in progress.";
+    }
     return code === "23505" ? "That reference is already used by another job" : err.message;
   }
   return "Something went wrong";
