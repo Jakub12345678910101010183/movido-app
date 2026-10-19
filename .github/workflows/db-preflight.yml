@@ -22,6 +22,9 @@ permissions:
 
 # Own group: a preflight never queues behind, replaces or cancels a pending
 # db-migrate run (GitHub keeps one pending run per group and drops the older).
+# Trade-off: a preflight can overlap a running migration. It cannot write
+# (read-only session, 30 s timeout, no locks on public tables), but a result
+# taken during an apply is meaningless: do not run the two at the same time.
 concurrency:
   group: db-preflight-production
   cancel-in-progress: false
@@ -68,6 +71,16 @@ jobs:
         run: |
           set -euo pipefail
           bash ops/migrate/run.sh check-url >/dev/null
+          # URL query parameters override PGOPTIONS/PGSSLMODE and the checked
+          # host/port in libpq: allow only TLS-enforcing sslmode values and a
+          # connect timeout. The URL is never printed.
+          python3 - <<'PY'
+          import os, sys, urllib.parse as u
+          q = u.parse_qs(u.urlsplit(os.environ["DATABASE_URL"]).query, keep_blank_values=True)
+          ok = all(k == "connect_timeout" or (k == "sslmode" and v in (["require"], ["verify-ca"], ["verify-full"])) for k, v in q.items())
+          print("url parameters:", "ok" if ok else "REFUSED (only sslmode=require|verify-ca|verify-full and connect_timeout are allowed)")
+          sys.exit(0 if ok else 1)
+          PY
           s=$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT current_setting('default_transaction_read_only') || ' ' || current_setting('transaction_read_only') || ' ' || current_setting('statement_timeout')")
           echo "session: default_transaction_read_only transaction_read_only statement_timeout = $s"
           [[ "$s" == "on on 30s" ]] || { echo "session is not read-only with a 30s timeout; stopping" >&2; exit 1; }
