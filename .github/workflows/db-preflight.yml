@@ -1,0 +1,78 @@
+# Production database PREFLIGHT for O-1: read-only, never applies anything.
+#
+# Runs only the `vet`, `check-url` and `precheck` modes of ops/migrate/run.sh,
+# plus a check that the server session is read-only. This file has no apply,
+# rollback or postcheck step; db-migrate.yml is unchanged and still the only
+# workflow that can change the database.
+#
+# Read-only twice: PGOPTIONS makes every session default to read-only with a
+# 30 s statement timeout (verified on the server before the precheck runs), and
+# precheck.sql itself runs inside BEGIN READ ONLY.
+#
+# Public repository: every log line is public. The steps print only checks,
+# booleans, counts and hashes. The database URL is a masked environment secret
+# and is never echoed.
+name: db-preflight (production, read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Own group: a preflight never queues behind, replaces or cancels a pending
+# db-migrate run (GitHub keeps one pending run per group and drops the older).
+concurrency:
+  group: db-preflight-production
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: preflight 20261004120000_office_job_guard.sql (read-only)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production-db
+    env:
+      MIGRATION: 20261004120000_office_job_guard.sql
+      PGSSLMODE: require
+      PGOPTIONS: -c default_transaction_read_only=on -c statement_timeout=30000
+    steps:
+      - name: Check out ops scripts (this commit)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Fetch the pinned source commit
+        run: |
+          commit=$(jq -r '.source_commit' ops/migrate/allowlist.json)
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "bad source commit" >&2; exit 1; }
+          git fetch --no-tags --depth=1 origin "$commit"
+          echo "source commit: $commit"
+
+      - name: Vet the migration (allowlist, SHA-256, sqlguard)
+        run: bash ops/migrate/run.sh vet
+
+      - name: Tools
+        run: psql --version
+
+      - name: Check connection target (Session Pooler, port 5432)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash ops/migrate/run.sh check-url
+
+      - name: Check the session is read-only
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          bash ops/migrate/run.sh check-url >/dev/null
+          s=$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT current_setting('default_transaction_read_only') || ' ' || current_setting('transaction_read_only') || ' ' || current_setting('statement_timeout')")
+          echo "session: default_transaction_read_only transaction_read_only statement_timeout = $s"
+          [[ "$s" == "on on 30s" ]] || { echo "session is not read-only with a 30s timeout; stopping" >&2; exit 1; }
+
+      - name: Precheck (read-only)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash ops/migrate/run.sh precheck
