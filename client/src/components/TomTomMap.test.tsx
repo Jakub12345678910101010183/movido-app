@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TomTomMap, truckRouteParams } from "./TomTomMap";
+import { TomTomMap, buildMapStyle, truckRouteParams } from "./TomTomMap";
 
 describe("TomTomMap container", () => {
   it("positions the SDK container inline so the SDK stylesheet cannot collapse it", () => {
@@ -22,5 +22,17 @@ describe("truckRouteParams", () => {
     expect(truckRouteParams({ travelMode: "truck", vehicleHeight: 4 })).toBe("&travelMode=truck&vehicleHeight=4");
     expect(truckRouteParams({ travelMode: "car" })).toBe("");
     expect(truckRouteParams()).toBe("");
+  });
+});
+
+describe("buildMapStyle", () => {
+  it("names the traffic styles; stylesVisibility alone rendered no traffic", () => {
+    expect(buildMapStyle("night", true)).toEqual({ map: "basic_night", trafficFlow: "flow_relative", trafficIncidents: "incidents_night" });
+    expect(buildMapStyle("main", true)).toEqual({ map: "basic_main", trafficFlow: "flow_relative", trafficIncidents: "incidents_day" });
+    expect(buildMapStyle("night", false)).toEqual({ map: "basic_night" });
+  });
+
+  it("uses the hybrid overlay for satellite (imagery is added as a raster layer)", () => {
+    expect(buildMapStyle("satellite", false)).toEqual({ map: "hybrid_night" });
   });
 });
