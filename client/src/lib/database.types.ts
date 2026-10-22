@@ -165,6 +165,7 @@ type JobRow = {
   scheduled_date: string | null;
   eta: string | null;
   completed_at: string | null;
+  cancellation_reason: string | null;
   pod_status: Enums["pod_status"];
   pod_signature: string | null;
   /** Storage path in the private pod-photos bucket (legacy rows: data: URL). */

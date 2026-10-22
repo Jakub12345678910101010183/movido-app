@@ -66,14 +66,30 @@ function newTrackingToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Supabase errors are plain objects, not Error instances. */
+/** Translate database guard errors into actions the dispatcher can take. */
+const JOB_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_TRANSITION: "That status change is not allowed. Use Pending, Assigned, or cancel the job.",
+  CANCELLATION_REASON_REQUIRED: "Enter a reason before cancelling this job.",
+  ASSIGNED_REQUIRES_DRIVER: "Assign a driver before changing the job to Assigned.",
+  POD_READ_ONLY: "Proof of delivery can only be added by the driver.",
+  JOB_CLOSED: "Completed and cancelled jobs cannot be edited.",
+  JOB_FIELD_LOCKED: "The reference, driver, and vehicle cannot be changed after a job starts.",
+  STOP_HISTORY_LOCKED: "Stops already reached by the driver cannot be changed.",
+};
+
 function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
-    const code = "code" in err ? err.code : undefined;
-    return code === "23505" ? "That reference is already used by another job" : err.message;
-  }
-  return "Something went wrong";
+  const message = err instanceof Error
+    ? err.message
+    : typeof err === "object" && err !== null && "message" in err && typeof err.message === "string"
+      ? err.message
+      : "";
+  const code = typeof err === "object" && err !== null && "code" in err ? String(err.code) : undefined;
+  if (code === "23505") return "That reference is already used by another job";
+  const domainCode = Object.keys(JOB_ERROR_MESSAGES).find((key) => message.includes(key));
+  if (domainCode) return JOB_ERROR_MESSAGES[domainCode];
+  if (code === "MV400") return "Check the required job details and try again.";
+  if (code === "MV409") return "This change is no longer allowed. Refresh the job and try again.";
+  return message || "Something went wrong";
 }
 
 function csvCell(value: unknown): string {
@@ -92,12 +108,13 @@ interface JobFormData {
   customer_phone: string;
   driver_notes: string;
   stops: Stop[];
+  cancellation_reason: string;
 }
 
 const defaultForm: JobFormData = {
   reference: "", customer: "", status: "pending", priority: "medium",
   pickup_address: "", delivery_address: "", eta: "", vehicle_id: NONE, driver_id: NONE, scheduled_date: "",
-  customer_phone: "", driver_notes: "", stops: [],
+  customer_phone: "", driver_notes: "", stops: [], cancellation_reason: "",
 };
 
 export default function Jobs() {
@@ -128,34 +145,43 @@ export default function Jobs() {
   });
 
   /**
-   * Geocode every address so server-side geofencing and the map have
-   * coordinates. An address that cannot be located is still saved; the
-   * dispatcher is told which ones will not trigger arrivals.
+   * Geocode job addresses. On edits, leave unchanged stop history out of the
+   * update so the server preserves the driver's arrival evidence.
    */
-  const buildPayload = async () => {
+  const buildPayload = async (isEdit = false) => {
     if (formData.eta.trim() && !toEtaIso(formData.scheduled_date, formData.eta)) {
       throw new Error("ETA must be a time such as 14:30");
     }
+    const originalStops = isEdit ? parseStops(selectedJob?.stops) : [];
+    const stopsChanged = !isEdit || JSON.stringify(formData.stops) !== JSON.stringify(originalStops);
     const stopsIn = formData.stops.filter((stop) => stop.address.trim());
     const pickup = formData.pickup_address.trim();
     const delivery = formData.delivery_address.trim();
     const locate = (address: string) => (address ? tomtomGeocode(address) : Promise.resolve(null));
-    const [pickupPos, deliveryPos, ...stopPos] = await Promise.all([
-      locate(pickup), locate(delivery), ...stopsIn.map((stop) => locate(stop.address.trim())),
-    ]);
+    const [pickupPos, deliveryPos] = await Promise.all([locate(pickup), locate(delivery)]);
+    const lastStartedStop = isEdit && selectedJob?.status === "in_progress"
+      ? originalStops.reduce((last, stop, index) => stop.status !== "pending" ? index : last, -1)
+      : -1;
+    const stopPos = stopsChanged
+      ? await Promise.all(stopsIn.map((stop, index) =>
+          index <= lastStartedStop
+            ? Promise.resolve({ lat: originalStops[index]?.lat ?? null, lng: originalStops[index]?.lng ?? null })
+            : locate(stop.address.trim()),
+        ))
+      : [];
     const unlocated = [pickup && !pickupPos, delivery && !deliveryPos, ...stopPos.map((p) => !p)]
       .filter(Boolean).length;
     if (unlocated > 0) {
       toast.warning(`${unlocated} address${unlocated === 1 ? "" : "es"} could not be located — no arrival alerts for ${unlocated === 1 ? "it" : "them"}.`);
     }
-    const stops = stopsIn.map((stop, i) => ({
+    const stops = stopsChanged ? stopsIn.map((stop, i) => ({
       label: stop.label.trim() || `Stop ${i + 1}`,
       address: stop.address.trim(),
       status: stop.status ?? "pending",
       completed_at: stop.completed_at ?? null,
       lat: stopPos[i]?.lat ?? null,
       lng: stopPos[i]?.lng ?? null,
-    }));
+    })) : undefined;
     return {
       customer: formData.customer.trim(), status: formData.status, priority: formData.priority,
       pickup_address: pickup || null,
@@ -168,12 +194,14 @@ export default function Jobs() {
       driver_id: formData.driver_id !== NONE ? parseInt(formData.driver_id) : null,
       customer_phone: formData.customer_phone.trim() || null,
       driver_notes: formData.driver_notes.trim() || null,
-      stops: stops.length > 0 ? stops : null,
+      ...(formData.status === "cancelled" ? { cancellation_reason: formData.cancellation_reason.trim() } : {}),
+      ...(stopsChanged ? { stops: stops && stops.length > 0 ? stops : null } : {}),
     };
   };
 
   const handleAdd = async () => {
     if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
+    if (formData.status === "assigned" && formData.driver_id === NONE) { toast.error("Assign a driver before creating an Assigned job"); return; }
     setIsSaving(true);
     try {
       const payload = await buildPayload();
@@ -211,10 +239,16 @@ export default function Jobs() {
 
   const handleEdit = async () => {
     if (!selectedJobId) return;
+    if (selectedJob?.status === "completed" || selectedJob?.status === "cancelled") {
+      toast.error("Completed and cancelled jobs cannot be edited");
+      return;
+    }
     if (!formData.customer.trim()) { toast.error("Customer name is required"); return; }
+    if (formData.status === "assigned" && formData.driver_id === NONE) { toast.error("Assign a driver before changing the job to Assigned"); return; }
+    if (formData.status === "cancelled" && !formData.cancellation_reason.trim()) { toast.error("Enter a reason before cancelling this job"); return; }
     setIsSaving(true);
     try {
-      await update(selectedJobId, { ...(await buildPayload()), reference: formData.reference.trim() });
+      await update(selectedJobId, { ...(await buildPayload(true)), reference: formData.reference.trim() });
       setShowEditModal(false); setSelectedJobId(null); setFormData(defaultForm);
       toast.success("Job updated successfully");
     } catch (err: unknown) { toast.error(`Failed: ${errorMessage(err)}`); }
@@ -246,11 +280,12 @@ export default function Jobs() {
     if (!selectedJobId) return;
     setIsSaving(true);
     try { await remove(selectedJobId); setShowDeleteModal(false); setSelectedJobId(null); toast.success("Job deleted"); }
-    catch (err: any) { toast.error(err.message); }
+    catch (err: unknown) { toast.error(errorMessage(err)); }
     finally { setIsSaving(false); }
   };
 
   const openEdit = (job: Job) => {
+    if (job.status === "completed" || job.status === "cancelled") return;
     setSelectedJobId(job.id);
     setFormData({
       reference: job.reference, customer: job.customer, status: job.status, priority: job.priority,
@@ -260,6 +295,7 @@ export default function Jobs() {
       scheduled_date: job.scheduled_date || "",
       customer_phone: job.customer_phone || "",
       driver_notes: job.driver_notes || "",
+      cancellation_reason: job.cancellation_reason || "",
       stops: parseStops(job.stops),
     });
     setShowEditModal(true);
@@ -294,6 +330,7 @@ export default function Jobs() {
 
   const openAdd = async () => {
     // Open immediately; the suggested reference fills in when it arrives.
+    setSelectedJobId(null);
     setFormData({ ...defaultForm });
     setAutoReference("");
     setShowAddModal(true);
@@ -308,21 +345,34 @@ export default function Jobs() {
 
   const selectedJob = jobs.find(j => j.id === selectedJobId);
 
-  const renderForm = () => (
+  const renderForm = (isEditing: boolean) => {
+    const currentJob = isEditing ? selectedJob : undefined;
+    const isInProgress = currentJob?.status === "in_progress";
+    const statusOptions: Array<{ value: JobFormData["status"]; label: string; disabled?: boolean }> =
+      !isEditing
+        ? [{ value: "pending", label: "Pending" }, { value: "assigned", label: "Assigned" }]
+        : isInProgress
+          ? [{ value: "in_progress", label: "In Progress", disabled: true }, { value: "cancelled", label: "Cancelled" }]
+          : [{ value: "pending", label: "Pending" }, { value: "assigned", label: "Assigned" }, { value: "cancelled", label: "Cancelled" }];
+    const lastStartedStop = isInProgress
+      ? formData.stops.reduce((last, stop, index) => stop.status !== "pending" ? index : last, -1)
+      : -1;
+    return (
     <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Reference</Label><Input className="mt-1.5 bg-muted/30" value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} /></div>
+        <div><Label>Reference</Label><Input className="mt-1.5 bg-muted/30" value={formData.reference} disabled={isInProgress} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} /></div>
         <div><Label>Customer *</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., Tesco Distribution" value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })} /></div>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as JobFormData["status"] })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="assigned">Assigned</SelectItem><SelectItem value="in_progress">In Progress</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+        <div><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as JobFormData["status"] })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger><SelectContent>{statusOptions.map((option) => <SelectItem key={option.value} value={option.value} disabled={option.disabled}>{option.label}</SelectItem>)}</SelectContent></Select></div>
         <div><Label>Priority</Label><Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v as JobFormData["priority"] })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="urgent">Urgent</SelectItem></SelectContent></Select></div>
       </div>
+      {formData.status === "cancelled" && <div><Label htmlFor="cancellation-reason">Cancellation reason *</Label><Textarea id="cancellation-reason" className="mt-1.5 bg-muted/30" placeholder="Why is this job being cancelled?" value={formData.cancellation_reason} onChange={(e) => setFormData({ ...formData, cancellation_reason: e.target.value })} rows={2} /></div>}
       <div><Label>Pickup Address</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., London Distribution Centre" value={formData.pickup_address} onChange={(e) => setFormData({ ...formData, pickup_address: e.target.value })} /></div>
       <div><Label>Delivery Address</Label><Input className="mt-1.5 bg-muted/30" placeholder="e.g., Birmingham Hub" value={formData.delivery_address} onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })} /></div>
       <div className="grid grid-cols-2 gap-4">
-        <div><Label>Assign Vehicle</Label><Select value={formData.vehicle_id} onValueChange={(v) => setFormData({ ...formData, vehicle_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select vehicle" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{vehicles.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.vehicle_id} — {v.make} {v.model}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Assign Driver</Label><Select value={formData.driver_id} onValueChange={(v) => setFormData({ ...formData, driver_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select driver" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{drivers.map(d => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label>Assign Vehicle</Label><Select value={formData.vehicle_id} disabled={isInProgress} onValueChange={(v) => setFormData({ ...formData, vehicle_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select vehicle" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{vehicles.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.vehicle_id} — {v.make} {v.model}</SelectItem>)}</SelectContent></Select></div>
+        <div><Label>Assign Driver</Label><Select value={formData.driver_id} disabled={isInProgress} onValueChange={(v) => setFormData({ ...formData, driver_id: v })}><SelectTrigger className="mt-1.5 bg-muted/30"><SelectValue placeholder="Select driver" /></SelectTrigger><SelectContent><SelectItem value={NONE}>None</SelectItem>{drivers.map(d => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}</SelectContent></Select></div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div><Label htmlFor="job-date">Scheduled Date</Label><Input id="job-date" type="date" className="mt-1.5 bg-muted/30" value={formData.scheduled_date} onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })} /></div>
@@ -337,16 +387,17 @@ export default function Jobs() {
         </div>
         {formData.stops.map((stop, i) => (
           <div key={i} className="flex gap-2 mb-2">
-            <Input className="bg-muted/30 w-24 shrink-0" placeholder={`Stop ${i + 1}`} value={stop.label} onChange={(e) => updateStop(i, "label", e.target.value)} />
-            <Input className="bg-muted/30 flex-1" placeholder="Address" value={stop.address} onChange={(e) => updateStop(i, "address", e.target.value)} />
-            <Button type="button" variant="ghost" size="icon" onClick={() => removeStop(i)}><X className="w-4 h-4 text-red-400" /></Button>
+            <Input className="bg-muted/30 w-24 shrink-0" placeholder={`Stop ${i + 1}`} value={stop.label} disabled={i <= lastStartedStop} onChange={(e) => updateStop(i, "label", e.target.value)} />
+            <Input className="bg-muted/30 flex-1" placeholder="Address" value={stop.address} disabled={i <= lastStartedStop} onChange={(e) => updateStop(i, "address", e.target.value)} />
+            <Button type="button" variant="ghost" size="icon" disabled={i <= lastStartedStop} onClick={() => removeStop(i)}><X className="w-4 h-4 text-red-400" /></Button>
           </div>
         ))}
         {formData.stops.length === 0 && <p className="text-xs text-muted-foreground">No extra stops (pickup → delivery only)</p>}
       </div>
       <div><Label className="flex items-center gap-1.5"><StickyNote className="w-3 h-3" />Dispatcher Notes for Driver</Label><Textarea className="mt-1.5 bg-muted/30" placeholder="Gate code, access instructions, special requirements..." value={formData.driver_notes} onChange={(e) => setFormData({ ...formData, driver_notes: e.target.value })} rows={2} /></div>
     </div>
-  );
+    );
+  };
 
   return (
     <DashboardLayout>
@@ -400,7 +451,7 @@ export default function Jobs() {
                     <td className="p-4"><div className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="w-3 h-3" /><span className="truncate max-w-[150px]">{job.pickup_address || "-"}</span></div></td>
                     <td className="p-4"><div className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="w-3 h-3" /><span className="truncate max-w-[150px]">{job.delivery_address || "-"}</span></div></td>
                     <td className="p-4"><div className="flex items-center gap-1 text-sm"><Clock className="w-3 h-3 text-muted-foreground" /><span className="font-mono">{job.eta ? new Date(job.eta).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "TBD"}</span></div></td>
-                    <td className="p-4"><div className="flex items-center justify-end gap-2 whitespace-nowrap"><Button variant="outline" size="icon" aria-label="View details" title="View details" onClick={() => openDetail(job)}><Eye className="w-3 h-3" /></Button>{job.tracking_token && <Button variant="outline" size="icon" aria-label="Copy tracking link" title="Copy tracking link" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/track/${job.tracking_token}`); toast.success("Tracking link copied!"); }}><Link2 className="w-3 h-3" /></Button>}<Button variant="outline" size="sm" onClick={() => openEdit(job)}><Edit className="w-3 h-3 mr-1" />Edit</Button><Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" aria-label={`Delete ${job.reference}`} onClick={() => { setSelectedJobId(job.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button></div></td>
+                    <td className="p-4"><div className="flex items-center justify-end gap-2 whitespace-nowrap"><Button variant="outline" size="icon" aria-label="View details" title="View details" onClick={() => openDetail(job)}><Eye className="w-3 h-3" /></Button>{job.tracking_token && <Button variant="outline" size="icon" aria-label="Copy tracking link" title="Copy tracking link" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/track/${job.tracking_token}`); toast.success("Tracking link copied!"); }}><Link2 className="w-3 h-3" /></Button>}{job.status !== "completed" && job.status !== "cancelled" && <Button variant="outline" size="sm" onClick={() => openEdit(job)}><Edit className="w-3 h-3 mr-1" />Edit</Button>}{job.status !== "completed" && job.status !== "cancelled" && <Button variant="outline" size="icon" className="text-red-500 hover:text-red-400 hover:border-red-500/50" aria-label={`Delete ${job.reference}`} onClick={() => { setSelectedJobId(job.id); setShowDeleteModal(true); }}><Trash2 className="w-4 h-4" /></Button>}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -408,8 +459,8 @@ export default function Jobs() {
           </div>
         )}
 
-        <Dialog open={showAddModal} onOpenChange={setShowAddModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Add New Job</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button><Button onClick={handleAdd} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Create Job</Button></DialogFooter></DialogContent></Dialog>
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Edit Job</DialogTitle></DialogHeader>{renderForm()}<DialogFooter><Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button><Button onClick={handleEdit} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button></DialogFooter></DialogContent></Dialog>
+        <Dialog open={showAddModal} onOpenChange={setShowAddModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Add New Job</DialogTitle></DialogHeader>{renderForm(false)}<DialogFooter><Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button><Button onClick={handleAdd} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Create Job</Button></DialogFooter></DialogContent></Dialog>
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}><DialogContent className="bg-card border-border max-w-lg"><DialogHeader><DialogTitle>Edit Job</DialogTitle></DialogHeader>{renderForm(true)}<DialogFooter><Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button><Button onClick={handleEdit} disabled={isSaving} className="glow-cyan-sm">{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button></DialogFooter></DialogContent></Dialog>
         <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}><DialogContent className="bg-card border-border max-w-md"><DialogHeader><DialogTitle>Delete Job</DialogTitle></DialogHeader><p className="text-muted-foreground">Are you sure you want to delete job <strong className="text-foreground">{selectedJob?.reference}</strong>? This action cannot be undone.</p><DialogFooter><Button variant="outline" onClick={() => setShowDeleteModal(false)}>Cancel</Button><Button variant="destructive" onClick={handleDelete} disabled={isSaving}>{isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Delete</Button></DialogFooter></DialogContent></Dialog>
 
         {/* ========== JOB DETAIL MODAL ========== */}
@@ -434,6 +485,12 @@ export default function Jobs() {
                   ))}
                   <div className="flex items-start gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-500 mt-1.5 shrink-0" /><div><p className="text-xs text-muted-foreground">Delivery</p><p>{selectedJob.delivery_address || "—"}</p></div></div>
                 </div>
+                {selectedJob.cancellation_reason && (
+                  <div className="bg-muted/20 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Cancellation reason</p>
+                    <p>{selectedJob.cancellation_reason}</p>
+                  </div>
+                )}
                 {selectedJob.customer_phone && (
                   <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-3"><Phone className="w-3.5 h-3.5 text-green-400" /><span className="text-green-400">{selectedJob.customer_phone}</span></div>
                 )}
