@@ -6,8 +6,8 @@ export default function Terms() {
     <LegalPage title="Terms of Service" updated="22 October 2026">
       <Section title="1. About these terms">
         <p>
-          These terms apply to the MOViDO web application at movidologistics.uk ("the Service"), provided by
-          Movido Logistics Ltd (company number <Todo>company number</Todo>, registered office <Todo>registered address</Todo>)
+          These terms apply to the MOViDO web application at movidologistics.uk ("the Service"), provided from
+          Northampton, United Kingdom, by <Todo>legal name of the provider (company or sole trader) and address</Todo>
           ("we", "us"). By creating an account or using the Service on behalf of a company, you accept these terms for that
           company ("the Customer") and confirm you are authorised to do so. The Service is for business use only.
         </p>
