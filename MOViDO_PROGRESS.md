@@ -1,10 +1,55 @@
 # MOViDO — Production Readiness Progress
 
-Last updated: 2026-09-27 · Owner configuration close-out (see "Owner configuration close-out")
+Last updated: 2026-10-22 · Start with "Current state (2026-10-22)" below; older sections are history.
 Supabase project `zjvozjnbvrtrrpehqdpf` · Vercel project `movido-app` · Domain `www.movidologistics.uk`
 
 Status legend: **PASS** = actually exercised and verified · **FAIL** = tested and broken ·
 **BLOCKED** = could not be verified (external dependency / missing access).
+
+## Current state (2026-10-22) — read this first
+
+Single source of truth for every assistant working on MOViDO. Anything below this section is
+history and may be out of date. Facts here were verified on production on 2026-10-22.
+
+### Done on 2026-10-22
+| Item | Evidence |
+|---|---|
+| Migration O-1 `20261004120000_office_job_guard.sql` applied | db-migrate run #4 `39767304810`: `apply: COMMITTED`, `postcheck: PASS`, history version `20261022110028` (66 rows) |
+| Read-only preflight before it | runs `39762853097`, `39765959113`: `precheck: PASS` |
+| Office UI aligned with O-1 (PR #29) + POD Refresh fix (PR #30) | Production test: statuses limited, cancellation needs a reason, closed jobs read-only, in-progress driver/vehicle/reference locked, POD read-only |
+| CI on every PR and on `main` (`.github/workflows/ci.yml`: `tsc --noEmit` + vitest) | Required check `tsc + vitest` on `main` (ruleset: required check, no deletion, no force push) |
+| `production-db` environment needs owner approval | Required reviewer: repo owner; a dispatched preflight waited for approval |
+| `actions/checkout` v6.1.0 (SHA-pinned) in all workflows; readable guard errors in AI Dispatcher (PR #31) | CI green |
+| Lists show own writes immediately (PR #32) | `useRealtimeTable` upserts locally + realtime by id |
+| Map: Dark/Light/Satellite switch, traffic shows, satellite imagery (PR #34) | Production: traffic flow/incident tiles 200, satellite raster visible |
+| All 18 office pages load without console errors | Browser check on production |
+| Terms/Privacy: 14 of 20 owner fields drafted (PR #33) | Live on /terms, /privacy |
+
+### Open — blocks selling to other companies
+1. **No registered company yet.** No "Movido Logistics Ltd" exists at Companies House. PR #35 removes "Ltd"
+   from footer/Terms/Privacy (open until merged). Owner: register a company, pay the ICO data protection fee,
+   then fill provider name, company number, registered office, VAT and ICO number in Terms/Privacy.
+2. **Driver re-invitation**: if a driver opens the invite link but does not set a password, the invitation stays
+   pending 7 days and cannot be re-sent. Fix belongs in Edge Function `invite-driver` (revoke the caller-org's
+   pending invitation after the authority check, then create a new one) or in `create_driver_invitation`.
+   Needs Supabase project access to deploy and a real mailbox to verify.
+3. **E-mail flows** (sign-up confirmation, password reset, invitation) not verified end-to-end on a real mailbox.
+4. **Supabase plan is Free**: no backups. Upgrade to Pro before the first paying customer.
+5. **Stripe**: live payments work (owner's own subscription). Not yet confirmed: "If all retries fail → Cancel
+   the subscription". Trial end is display-only; policy not decided.
+6. **TomTom key** shared by web and native app, works from any origin, committed in public `movido-driver` repo.
+   Usage normal (owner, 2026-10-22). Split into a domain-restricted web key and rotate the app key.
+7. **Native driver app** never run on real devices (needs Expo/EAS, Apple, Google accounts). The web driver
+   workspace `/driver` works.
+8. Leftover from O-1 test: cancelled job `TEST-O1-CLAUDE` (owner deleting via SQL editor).
+9. `precheck.sql` reports `long_idle_transactions` but `all_ok` does not require 0; fix before the next migration
+   (O-1 runs showed 0). The migration pipeline currently supports only O-1 and its rollback.
+
+### Rules for assistants
+- Read this section and check `git log origin/main` before acting; do not repeat finished work.
+- Never run `db-migrate`/apply/rollback without the owner's explicit yes; `production-db` needs his approval.
+- Code goes through a PR; `main` requires the `tsc + vitest` check. The owner merges.
+- Never print secrets, keys or the database URL.
 
 ## How things were verified
 
