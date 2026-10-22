@@ -19,6 +19,35 @@ const TOMTOM_API_KEY = import.meta.env.VITE_TOMTOM_API_KEY;
 const TOMTOM_SDK_VERSION = "6.25.0";
 const TOMTOM_BASE = `https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/${TOMTOM_SDK_VERSION}`;
 
+type MapStyleName = "main" | "night" | "satellite";
+
+/**
+ * SDK 6 style object. Traffic layers exist only when the style names them;
+ * stylesVisibility alone shows nothing. "hybrid" is roads and labels without
+ * imagery, so satellite also needs the raster layer from addSatelliteImagery.
+ */
+export function buildMapStyle(mapStyle: MapStyleName, showTraffic: boolean) {
+  const map = mapStyle === "satellite" ? "hybrid_night" : mapStyle === "main" ? "basic_main" : "basic_night";
+  if (!showTraffic) return { map };
+  return { map, trafficFlow: "flow_relative", trafficIncidents: mapStyle === "main" ? "incidents_day" : "incidents_night" };
+}
+
+const SATELLITE_LAYER = "movido-satellite";
+
+/** Satellite tiles under every style layer, so roads and labels stay on top. */
+function addSatelliteImagery(map: any) {
+  if (map.getSource(SATELLITE_LAYER)) return;
+  map.addSource(SATELLITE_LAYER, {
+    type: "raster",
+    tiles: [`https://api.tomtom.com/map/1/tile/sat/main/{z}/{x}/{y}.jpg?key=${TOMTOM_API_KEY}`],
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: "© TomTom",
+  });
+  const first = map.getStyle().layers[0]?.id;
+  map.addLayer({ id: SATELLITE_LAYER, type: "raster", source: SATELLITE_LAYER }, first);
+}
+
 let sdkLoaded = false;
 let sdkLoading: Promise<void> | null = null;
 
@@ -220,6 +249,7 @@ export function TomTomMap({
   const routeLayersRef = useRef<string[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">(TOMTOM_API_KEY ? "loading" : "failed");
   const [attempt, setAttempt] = useState(0);
+  const appliedStyleRef = useRef<string | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -239,22 +269,23 @@ export function TomTomMap({
 
       const tt = window.tt;
 
-      // Built-in SDK 6 styles (the previous custom and v1 style URLs no longer exist).
-      const styleName = mapStyle === "satellite" ? "hybrid_night" : mapStyle === "main" ? "basic_main" : "basic_night";
-
       const mapOptions: any = {
         key: TOMTOM_API_KEY,
         container: containerRef.current,
         center: [initialCenter.lng, initialCenter.lat],
         zoom: initialZoom,
         language: "en-GB",
-        // SDK 6.x: traffic is a style layer toggled here (tile tiers are 5.x).
-        style: { map: styleName },
-        stylesVisibility: { trafficFlow: showTraffic, trafficIncidents: showTraffic },
+        // Built-in SDK 6 styles (the previous custom and v1 style URLs no longer exist).
+        style: buildMapStyle(mapStyle, showTraffic),
       };
 
       try {
         mapRef.current = tt.map(mapOptions);
+        appliedStyleRef.current = `${mapStyle}|${showTraffic}`;
+        if (mapStyle === "satellite") {
+          const map = mapRef.current;
+          map.once("load", () => addSatelliteImagery(map));
+        }
 
         // Force map to re-read container dimensions after browser layout finishes
         // (needed when container size is determined by flex/CSS rather than explicit px)
@@ -311,6 +342,18 @@ export function TomTomMap({
       }
     };
   }, [attempt]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switch style when Dark / Light / Satellite (or traffic) changes. DOM
+  // markers survive setStyle; the satellite raster has to be added again.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || status !== "ready") return;
+    const key = `${mapStyle}|${showTraffic}`;
+    if (appliedStyleRef.current === key) return;
+    appliedStyleRef.current = key;
+    map.setStyle(buildMapStyle(mapStyle, showTraffic));
+    if (mapStyle === "satellite") map.once("style.load", () => addSatelliteImagery(map));
+  }, [mapStyle, showTraffic, status]);
 
   // Update markers
   useEffect(() => {
