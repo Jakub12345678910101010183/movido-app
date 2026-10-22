@@ -40,7 +40,10 @@ history and may be out of date. Facts here were verified on production on 2026-1
 6. **TomTom key** shared by web and native app, works from any origin, committed in public `movido-driver` repo.
    Usage normal (owner, 2026-10-22). Split into a domain-restricted web key and rotate the app key.
 7. **Native driver app** never run on real devices (needs Expo/EAS, Apple, Google accounts). The web driver
-   workspace `/driver` works.
+   workspace `/driver` works. Since 2026-10-22 `movido-driver` `main` = the current app (Batch B, 8 Oct; driver PR #1,
+   merge `99f9d7e`); the June app that used to be on `main` is gone. Reviews of `main` before that date describe
+   old code. Its writes go through server RPCs, background location uses a TaskManager task, POD has no public
+   URLs. Its committed `.env` still holds the shared TomTom key (item 6).
 8. Leftover from O-1 test: cancelled job `TEST-O1-CLAUDE` (owner deleting via SQL editor).
 9. `precheck.sql` reports `long_idle_transactions` but `all_ok` does not require 0; fix before the next migration
    (O-1 runs showed 0). The migration pipeline currently supports only O-1 and its rollback.
