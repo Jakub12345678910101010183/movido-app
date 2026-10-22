@@ -40,6 +40,17 @@ function useRealtimeTable<T extends { id: number | string }>(
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Show the caller's own writes at once. Realtime echoes them too, but it can
+  // arrive late or not at all; both paths upsert by id, so nothing duplicates.
+  const applyLocal = useCallback((row: T) => {
+    setData(prev => prev.some(item => item.id === row.id)
+      ? prev.map(item => (item.id === row.id ? row : item))
+      : [row, ...prev]);
+  }, []);
+  const dropLocal = useCallback((id: T["id"]) => {
+    setData(prev => prev.filter(item => item.id !== id));
+  }, []);
+
   const fetch = useCallback(async () => {
     try {
       const load = () => supabase.from(table).select("*").order(orderBy, { ascending: false })
@@ -74,18 +85,10 @@ function useRealtimeTable<T extends { id: number | string }>(
         "postgres_changes",
         { event: "*", schema: "public", table },
         (payload) => {
-          if (payload.eventType === "INSERT") {
-            setData(prev => [payload.new as T, ...prev]);
-          } else if (payload.eventType === "UPDATE") {
-            setData(prev =>
-              prev.map(item =>
-                item.id === (payload.new as T).id ? (payload.new as T) : item
-              )
-            );
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            applyLocal(payload.new as T);
           } else if (payload.eventType === "DELETE") {
-            setData(prev =>
-              prev.filter(item => item.id !== (payload.old as T).id)
-            );
+            dropLocal((payload.old as T).id);
           }
         }
       )
@@ -97,9 +100,9 @@ function useRealtimeTable<T extends { id: number | string }>(
       fallback.stop();
       supabase.removeChannel(channel);
     };
-  }, [table, fetch]);
+  }, [table, fetch, applyLocal, dropLocal]);
 
-  return { data, isLoading, error, refetch: fetch };
+  return { data, isLoading, error, refetch: fetch, applyLocal, dropLocal };
 }
 
 // ============================================
@@ -107,7 +110,7 @@ function useRealtimeTable<T extends { id: number | string }>(
 // ============================================
 
 export function useVehicles() {
-  const { data, isLoading, error, refetch } = useRealtimeTable<Vehicle>("vehicles");
+  const { data, isLoading, error, refetch, applyLocal, dropLocal } = useRealtimeTable<Vehicle>("vehicles");
 
   const create = useCallback(async (vehicle: InsertVehicle) => {
     const { data: row, error: err } = await supabase
@@ -116,8 +119,9 @@ export function useVehicles() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Vehicle);
     return row as Vehicle;
-  }, []);
+  }, [applyLocal]);
 
   const update = useCallback(async (id: number, updates: Partial<Vehicle>) => {
     const { data: row, error: err } = await supabase
@@ -127,12 +131,14 @@ export function useVehicles() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Vehicle);
     return row as Vehicle;
-  }, []);
+  }, [applyLocal]);
 
   const remove = useCallback(async (id: number) => {
     await deleteOrExplain("vehicles", id, "This vehicle is still linked to jobs, a driver or maintenance records, so it is kept. Change its status instead.");
-  }, []);
+    dropLocal(id);
+  }, [dropLocal]);
 
   return { vehicles: data, isLoading, error, refetch, create, update, remove };
 }
@@ -142,7 +148,7 @@ export function useVehicles() {
 // ============================================
 
 export function useDrivers() {
-  const { data, isLoading, error, refetch } = useRealtimeTable<Driver>("drivers");
+  const { data, isLoading, error, refetch, applyLocal, dropLocal } = useRealtimeTable<Driver>("drivers");
 
   const create = useCallback(async (driver: InsertDriver) => {
     const { data: row, error: err } = await supabase
@@ -151,8 +157,9 @@ export function useDrivers() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Driver);
     return row as Driver;
-  }, []);
+  }, [applyLocal]);
 
   const update = useCallback(async (id: number, updates: Partial<Driver>) => {
     const { data: row, error: err } = await supabase
@@ -162,12 +169,14 @@ export function useDrivers() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Driver);
     return row as Driver;
-  }, []);
+  }, [applyLocal]);
 
   const remove = useCallback(async (id: number) => {
     await deleteOrExplain("drivers", id, "Drivers with jobs or a MOViDO login are kept as records. Remove their login on the Team page, or set them off duty.");
-  }, []);
+    dropLocal(id);
+  }, [dropLocal]);
 
   return { drivers: data, isLoading, error, refetch, create, update, remove };
 }
@@ -233,7 +242,7 @@ export function useRealtimeDriverLocations() {
 // ============================================
 
 export function useJobs() {
-  const { data, isLoading, error, refetch } = useRealtimeTable<Job>("jobs");
+  const { data, isLoading, error, refetch, applyLocal, dropLocal } = useRealtimeTable<Job>("jobs");
 
   const create = useCallback(async (job: InsertJob) => {
     const { data: row, error: err } = await supabase
@@ -242,8 +251,9 @@ export function useJobs() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Job);
     return row as Job;
-  }, []);
+  }, [applyLocal]);
 
   const update = useCallback(async (id: number, updates: Partial<Job>) => {
     const { data: row, error: err } = await supabase
@@ -253,12 +263,14 @@ export function useJobs() {
       .select()
       .single();
     if (err) throw err;
+    applyLocal(row as Job);
     return row as Job;
-  }, []);
+  }, [applyLocal]);
 
   const remove = useCallback(async (id: number) => {
     await deleteOrExplain("jobs", id, "Jobs with proof of delivery are kept as delivery records and cannot be deleted.");
-  }, []);
+    dropLocal(id);
+  }, [dropLocal]);
 
   const generateReference = useCallback(async () => {
     // Next number after the highest reference this organisation already used
