@@ -22,7 +22,7 @@ export default function Footer() {
               </div>
             </Link>
             <p className="text-sm text-muted-foreground">
-              © 2026 Movido Logistics Ltd. Northampton, UK.
+              © 2026 MOViDO. Northampton, UK.
             </p>
             <nav aria-label="Legal" className="flex gap-4 text-sm">
               <Link href="/privacy" className="text-muted-foreground hover:text-foreground">Privacy Policy</Link>

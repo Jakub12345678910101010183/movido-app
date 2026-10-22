@@ -6,8 +6,8 @@ export default function Privacy() {
     <LegalPage title="Privacy Policy" updated="22 October 2026">
       <Section title="1. Who we are">
         <p>
-          MOViDO is dispatch software provided by Movido Logistics Ltd, Northampton, United Kingdom
-          (company number <Todo>company number</Todo>, registered office <Todo>registered address</Todo>).
+          MOViDO is dispatch software provided from Northampton, United Kingdom, by
+          {" "}<Todo>legal name of the provider (company or sole trader) and address</Todo>.
           Contact for privacy questions: <a className="text-primary hover:underline" href="mailto:movidologistics@gmail.com">movidologistics@gmail.com</a>.
         </p>
       </Section>
