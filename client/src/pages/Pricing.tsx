@@ -185,8 +185,6 @@ export default function Pricing() {
   
   const subscriptionCost = fleetSize * 35; // Professional plan
   const netMonthlySavings = monthlyFuelSavings + monthlyTimeSavings - subscriptionCost;
-  const annualSavings = netMonthlySavings * 12;
-  const roi = subscriptionCost > 0 ? ((netMonthlySavings / subscriptionCost) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-terminal">
@@ -314,7 +312,7 @@ export default function Pricing() {
                   value={[fleetSize]}
                   onValueChange={(v) => setFleetSize(v[0])}
                   min={1}
-                  max={1500}
+                  max={200}
                   step={1}
                   className="py-2"
                 />
@@ -385,7 +383,7 @@ export default function Pricing() {
                   <label className="text-sm text-muted-foreground">Your expected fuel saving</label>
                   <span className="font-mono text-primary">{fuelSavingPct}%</span>
                 </div>
-                <Slider value={[fuelSavingPct]} onValueChange={(v) => setFuelSavingPct(v[0])} min={0} max={20} step={1} className="py-2" aria-label="Expected fuel saving" />
+                <Slider value={[fuelSavingPct]} onValueChange={(v) => setFuelSavingPct(v[0])} min={0} max={10} step={1} className="py-2" aria-label="Expected fuel saving" />
               </div>
 
               <div>
@@ -449,20 +447,9 @@ export default function Pricing() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-border">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Annual Savings</p>
-                    <p className="text-xl font-mono font-bold text-cyan">
-                      £{annualSavings.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">ROI</p>
-                    <p className="text-xl font-mono font-bold text-cyan">
-                      {roi.toFixed(0)}%
-                    </p>
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground mt-6 pt-6 border-t border-border">
+                  An estimate from the figures you entered, not a guarantee. Actual savings depend on your routes and operations.
+                </p>
               </div>
             </div>
           </div>
