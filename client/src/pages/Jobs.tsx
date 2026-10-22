@@ -16,7 +16,7 @@ import { Plus, Search, Filter, Edit, Trash2, ArrowUpDown, Download, RefreshCw, L
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useJobs, useVehicles, useDrivers } from "@/hooks/useSupabaseData";
-import type { Job, GeofenceEvent } from "@/lib/database.types";
+import type { Job, GeofenceEvent, Json } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 import { tomtomGeocode } from "@/components/TomTomMap";
 
@@ -176,7 +176,11 @@ export default function Jobs() {
     if (unlocated > 0) {
       toast.warning(`${unlocated} address${unlocated === 1 ? "" : "es"} could not be located — no arrival alerts for ${unlocated === 1 ? "it" : "them"}.`);
     }
-    const stops = stopsChanged ? stopsIn.map(({ stop }, i) => ({
+    // Started stops are sent back exactly as stored: the server compares them
+    // whole, including the driver's arrival evidence (arrived_at etc.), which
+    // parseStops drops.
+    const rawStops: Json[] = isEdit && Array.isArray(selectedJob?.stops) ? selectedJob.stops : [];
+    const stops = stopsChanged ? stopsIn.map(({ stop, index }, i) => index <= lastStartedStop && rawStops[index] !== undefined ? rawStops[index] : ({
       label: stop.label.trim() || `Stop ${i + 1}`,
       address: stop.address.trim(),
       status: stop.status ?? "pending",
