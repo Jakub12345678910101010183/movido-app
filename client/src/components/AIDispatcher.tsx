@@ -28,6 +28,7 @@ import {
 import { useJobs, useDrivers, useVehicles } from "@/hooks/useSupabaseData";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { jobErrorMessage } from "@/lib/jobErrors";
 
 interface AIMessage {
   id: string;
@@ -323,7 +324,7 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
           return {
             id: `ai-${Date.now()}`,
             role: "assistant",
-            content: `Failed to assign: ${error.message}`,
+            content: `Failed to assign: ${jobErrorMessage(error)}`,
             timestamp: now,
           };
         }
@@ -459,7 +460,7 @@ export function AIDispatcher({ open, onClose, onPlanRoute }: AIDispatcherProps) 
             .update({ driver_id: action.payload.driverId, status: "assigned" })
             .eq("id", action.payload.jobId);
           if (error) {
-            toast.error(`Failed: ${error.message}`);
+            toast.error(`Failed: ${jobErrorMessage(error)}`);
             return;
           }
           refetchJobs();
