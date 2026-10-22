@@ -30,7 +30,7 @@ const podStatusConfig: Record<string, { color: string; icon: typeof FileCheck; l
 };
 
 export default function POD() {
-  const { jobs, isLoading } = useJobs();
+  const { jobs, isLoading, refetch } = useJobs();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
