@@ -1,13 +1,13 @@
 # Production database PREFLIGHT for O-1: read-only, never applies anything.
 #
-# Runs only the `vet`, `check-url` and `precheck` modes of ops/migrate/run.sh,
-# plus a check that the server session is read-only. This file has no apply,
+# Runs `vet` and `check-url` from ops/migrate/run.sh, then runs precheck.sql
+# directly after setting and verifying the session. This file has no apply,
 # rollback or postcheck step; db-migrate.yml is unchanged and still the only
 # workflow that can change the database.
 #
-# Read-only twice: PGOPTIONS makes every session default to read-only with a
-# 30 s statement timeout (verified on the server before the precheck runs), and
-# precheck.sql itself runs inside BEGIN READ ONLY.
+# Read-only twice: each preflight connection sets and verifies read-only mode
+# and a 30 s statement timeout after authentication; precheck.sql also runs
+# inside BEGIN READ ONLY.
 #
 # Public repository: every log line is public. The steps print only checks,
 # booleans, counts and hashes. The database URL is a masked environment secret
@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           bash ops/migrate/run.sh check-url >/dev/null
-          # URL query parameters override PGOPTIONS/PGSSLMODE and the checked
+          # URL query parameters override PGSSLMODE and the checked
           # host/port in libpq: allow only TLS-enforcing sslmode values and a
           # connect timeout. The URL is never printed.
           python3 - <<'PY'
@@ -81,11 +81,31 @@ jobs:
           print("url parameters:", "ok" if ok else "REFUSED (only sslmode=require|verify-ca|verify-full and connect_timeout are allowed)")
           sys.exit(0 if ok else 1)
           PY
-          s=$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -c "SELECT current_setting('default_transaction_read_only') || ' ' || current_setting('transaction_read_only') || ' ' || current_setting('statement_timeout')")
+          # Startup options can be superseded by role/database defaults during
+          # authentication. Apply settings with SQL after connecting, then
+          # verify them on the server before continuing.
+          s=$(psql "$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 \
+            -c "SET default_transaction_read_only = on" \
+            -c "SET statement_timeout = '30s'" \
+            -c "SELECT current_setting('default_transaction_read_only') || ' ' || current_setting('transaction_read_only') || ' ' || current_setting('statement_timeout')")
           echo "session: default_transaction_read_only transaction_read_only statement_timeout = $s"
           [[ "$s" == "on on 30s" ]] || { echo "session is not read-only with a 30s timeout; stopping" >&2; exit 1; }
 
       - name: Precheck (read-only)
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: bash ops/migrate/run.sh precheck
+        run: |
+          set -euo pipefail
+          [[ "$MIGRATION" == "20261004120000_office_job_guard.sql" ]] || { echo "precheck.sql is for the O-1 migration" >&2; exit 1; }
+          # Apply settings after authentication on the same connection that
+          # runs precheck.sql. That script starts its own BEGIN READ ONLY.
+          psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 \
+            -v "expect_history_count=$(jq -r '.history_count_before' ops/migrate/expect.json)" \
+            -v "expect_history_last=$(jq -r '.history_last_before' ops/migrate/expect.json)" \
+            -v "protected_hashes=$(jq -r '.protected_hashes' ops/migrate/expect.json)" \
+            -v "pod_delete_qual_md5=$(jq -r '.pod_delete_qual_md5' ops/migrate/expect.json)" \
+            -c "SET default_transaction_read_only = on" \
+            -c "SET statement_timeout = '30s'" \
+            -c "DO \$\$ BEGIN IF current_setting('default_transaction_read_only') <> 'on' OR current_setting('transaction_read_only') <> 'on' OR current_setting('statement_timeout') <> '30s' THEN RAISE EXCEPTION 'session settings did not take effect'; END IF; END \$\$" \
+            -c "SELECT 'session: read-only, statement_timeout=30s'" \
+            -f ops/migrate/precheck.sql
