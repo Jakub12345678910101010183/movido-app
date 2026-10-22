@@ -39,7 +39,8 @@ history and may be out of date. Facts here were verified on production on 2026-1
    the subscription". Trial end is display-only; policy not decided.
 6. **TomTom key** shared by web and native app, works from any origin, committed in public `movido-driver` repo.
    Usage normal (owner, 2026-10-22). Split into a domain-restricted web key and rotate the app key.
-7. **Native driver app** never run on real devices (needs Expo/EAS, Apple, Google accounts). The web driver
+7. **Native driver app**: owner field-tested build 1.0.1 (1) at work (reported 2026-10-22): auto-arrive and
+   geolocation pass. Not yet: store release (Expo/EAS, Apple, Google accounts), PL/RO languages, WTD for drivers. The web driver
    workspace `/driver` works. Since 2026-10-22 `movido-driver` `main` = the current app (Batch B, 8 Oct; driver PR #1,
    merge `99f9d7e`); the June app that used to be on `main` is gone. Reviews of `main` before that date describe
    old code. Its writes go through server RPCs, background location uses a TaskManager task, POD has no public
