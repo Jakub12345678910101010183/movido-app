@@ -3,13 +3,12 @@ import LegalPage, { Section, Todo } from "@/components/LegalPage";
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 September 2026">
+    <LegalPage title="Privacy Policy" updated="22 October 2026">
       <Section title="1. Who we are">
         <p>
           MOViDO is dispatch software provided by Movido Logistics Ltd, Northampton, United Kingdom
           (company number <Todo>company number</Todo>, registered office <Todo>registered address</Todo>).
-          Contact for privacy questions: <a className="text-primary hover:underline" href="mailto:movidologistics@gmail.com">movidologistics@gmail.com</a>
-          {" "}<Todo>dedicated privacy contact, if different</Todo>.
+          Contact for privacy questions: <a className="text-primary hover:underline" href="mailto:movidologistics@gmail.com">movidologistics@gmail.com</a>.
         </p>
       </Section>
 
@@ -23,7 +22,7 @@ export default function Privacy() {
             <strong>For the operational data you put into MOViDO</strong> — your drivers, vehicles, jobs, your
             customers' names and addresses, proof of delivery, documents and driver locations — your company is the
             controller and we process it on your behalf as <strong>processor</strong>, only to provide the service.
-            A data processing agreement is <Todo>available on request / attached to the Terms</Todo>.
+            A data processing agreement is available on request.
           </li>
         </ul>
       </Section>
@@ -83,7 +82,7 @@ export default function Privacy() {
           <li><strong>Expo push service</strong> — only if a driver uses a MOViDO native app with notifications enabled.</li>
         </ul>
         <p>
-          Some providers may process data outside the UK. <Todo>list transfers and safeguards, e.g. UK IDTA / adequacy</Todo>.
+          Some providers may process data outside the UK, mainly in the European Economic Area and the United States. Where they do, we rely on the safeguards UK law allows: UK adequacy regulations (including the UK Extension to the EU–US Data Privacy Framework, where the provider is certified) or the UK International Data Transfer Addendum to the providers' standard contractual clauses.
           We do not sell personal data.
         </p>
       </Section>
@@ -91,8 +90,10 @@ export default function Privacy() {
       <Section title="7. How long we keep it">
         <p>
           Account and operational data are kept while your company's subscription or trial is active.
-          Retention periods: <Todo>retention for driver location history</Todo>, <Todo>retention for proof of delivery and jobs</Todo>,
-          <Todo>retention after an account is closed</Todo>, <Todo>retention of billing records</Todo>.
+          Driver location history, jobs and proof of delivery are kept for as long as your company's subscription or trial
+          is active, unless your company asks us to delete them sooner. After a subscription ends, your company's data is
+          kept so you can return or export it, and is deleted within 30 days of your written request. Billing records are
+          kept for six years, as UK tax law requires.
         </p>
         <p>
           In the app, jobs that carry proof of delivery cannot be deleted, drivers with job history are kept, and scanned
