@@ -3,7 +3,7 @@ import LegalPage, { Section, Todo } from "@/components/LegalPage";
 
 export default function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="26 September 2026">
+    <LegalPage title="Terms of Service" updated="22 October 2026">
       <Section title="1. About these terms">
         <p>
           These terms apply to the MOViDO web application at movidologistics.uk ("the Service"), provided by
@@ -54,7 +54,7 @@ export default function Terms() {
             {" "}<Link href="/pricing" className="text-primary hover:underline">pricing page</Link> when you subscribe. Payments are
             processed by Stripe. Prices exclude VAT unless stated: <Todo>VAT treatment</Todo>.
           </li>
-          <li>Subscriptions renew automatically until cancelled. <Todo>how to cancel, notice period, refunds</Todo>.</li>
+          <li>Subscriptions renew automatically until cancelled. To cancel, email us from the account owner's address; cancellation takes effect at the end of the billing period already paid for. We do not refund part-used periods, except where the law requires it.</li>
           <li>
             When a trial ends without a subscription, or a subscription is cancelled, you can still sign in, view and export
             your data, but you cannot add new jobs, vehicles or drivers until you subscribe. Nothing is deleted. If a payment
@@ -72,7 +72,7 @@ export default function Terms() {
             location — and for telling your drivers and customers how it is used.
           </li>
           <li>Only share customer tracking links with the person receiving the delivery.</li>
-          <li>On request we will export or delete your company's data: <Todo>export/deletion process and timescale after termination</Todo>.</li>
+          <li>On request we will export your company's data in a common format (such as CSV) within 30 days, and delete it within 30 days of a written request after the agreement ends, except records we must keep by law (for example billing records).</li>
         </ul>
       </Section>
 
@@ -90,27 +90,30 @@ export default function Terms() {
       <Section title="7. Availability and support">
         <p>
           We work to keep the Service available but do not guarantee it will be uninterrupted or error-free, and we do not
-          offer a service-level agreement unless agreed in writing. Support is by email: <Todo>support hours / response targets, if any</Todo>.
+          offer a service-level agreement unless agreed in writing. Support is by email; we aim to reply within two working days (Monday to Friday, excluding UK bank holidays).
         </p>
       </Section>
 
       <Section title="8. Liability">
         <p>
-          <Todo>limitation of liability wording — to be drafted by a lawyer</Todo>. Nothing in these terms limits liability
-          that cannot be limited by law.
+          Routes, ETAs, traffic, low-bridge and weight-limit information are provided to assist planning. Drivers remain
+          responsible for following road signs, restrictions and the law, and dispatchers for the decisions they make.
+          We are not liable for indirect or consequential loss, or for loss of profit, revenue, business or goodwill. Our
+          total liability in any 12 months is limited to the fees you paid us in the 12 months before the claim arose.
+          Nothing in these terms limits liability that cannot be limited by law.
         </p>
       </Section>
 
       <Section title="9. Ending the agreement">
         <p>
-          You can stop using the Service at any time. <Todo>termination rights, notice and what happens to data</Todo>.
+          You can stop using the Service at any time and cancel as described in section 4. We may end the agreement with 30 days' notice by email, or straight away for a serious breach of these terms or for non-payment after reminders. When it ends, your data stays available to view and export as described in section 4 until you ask us to delete it (section 5).
         </p>
       </Section>
 
       <Section title="10. Changes and law">
         <p>
-          We may update these terms and will post the new version here with a new date. <Todo>notice period for material changes</Todo>.
-          These terms are governed by the law of <Todo>governing law and courts, e.g. England and Wales</Todo>.
+          We may update these terms and will post the new version here with a new date. We will tell account owners about material changes by email at least 30 days before they take effect.
+          These terms are governed by the law of England and Wales, and the courts of England and Wales have exclusive jurisdiction.
         </p>
       </Section>
     </LegalPage>
