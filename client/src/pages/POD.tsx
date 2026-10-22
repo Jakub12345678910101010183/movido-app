@@ -160,7 +160,7 @@ export default function POD() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2">
-                                          {(job.pod_status === "signed" || job.pod_status === "photo") && (
+                          {(job.pod_status === "signed" || job.pod_status === "photo") && (
                             <Button variant="outline" size="sm" onClick={() => openView(job)}>
                               <Eye className="w-3 h-3 mr-1" />View
                             </Button>

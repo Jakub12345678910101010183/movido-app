@@ -154,7 +154,9 @@ export default function Jobs() {
     }
     const originalStops = isEdit ? parseStops(selectedJob?.stops) : [];
     const stopsChanged = !isEdit || JSON.stringify(formData.stops) !== JSON.stringify(originalStops);
-    const stopsIn = formData.stops.filter((stop) => stop.address.trim());
+    const stopsIn = formData.stops
+      .map((stop, index) => ({ stop, index }))
+      .filter(({ stop }) => stop.address.trim());
     const pickup = formData.pickup_address.trim();
     const delivery = formData.delivery_address.trim();
     const locate = (address: string) => (address ? tomtomGeocode(address) : Promise.resolve(null));
@@ -163,7 +165,7 @@ export default function Jobs() {
       ? originalStops.reduce((last, stop, index) => stop.status !== "pending" ? index : last, -1)
       : -1;
     const stopPos = stopsChanged
-      ? await Promise.all(stopsIn.map((stop, index) =>
+      ? await Promise.all(stopsIn.map(({ stop, index }) =>
           index <= lastStartedStop
             ? Promise.resolve({ lat: originalStops[index]?.lat ?? null, lng: originalStops[index]?.lng ?? null })
             : locate(stop.address.trim()),
@@ -174,7 +176,7 @@ export default function Jobs() {
     if (unlocated > 0) {
       toast.warning(`${unlocated} address${unlocated === 1 ? "" : "es"} could not be located — no arrival alerts for ${unlocated === 1 ? "it" : "them"}.`);
     }
-    const stops = stopsChanged ? stopsIn.map((stop, i) => ({
+    const stops = stopsChanged ? stopsIn.map(({ stop }, i) => ({
       label: stop.label.trim() || `Stop ${i + 1}`,
       address: stop.address.trim(),
       status: stop.status ?? "pending",
