@@ -3,7 +3,7 @@ import LegalPage, { Section, Todo } from "@/components/LegalPage";
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="22 October 2026">
+    <LegalPage title="Privacy Policy" updated="17 November 2026">
       <Section title="1. Who we are">
         <p>
           MOViDO is dispatch software provided from Northampton, United Kingdom, by
@@ -38,6 +38,17 @@ export default function Privacy() {
             latest position and a position history, and use them for the dispatch map, to record arrival and departure at
             pickups, stops and deliveries, and for the customer tracking link while that job is in progress. Sharing can be
             turned off at any time and stops when the screen is closed or the phone is locked.
+          </li>
+          <li>
+            <strong>MOViDO Driver app (Android and iPhone):</strong> while a driver has a job in progress, the app collects the
+            phone's GPS position (latitude, longitude, accuracy, speed, heading and time) <strong>including when the app is closed
+            or not in use</strong>, so arrivals at stops are recorded automatically and the office can see the vehicle. The app
+            explains this and asks for permission before collecting it, shows a notification while location is being shared,
+            and stops collecting location when no job is in progress or the driver signs out. The app also uses the camera (or
+            an existing photo the driver chooses) for proof of delivery, vehicle checks, incidents and fuel receipts, and a push
+            notification token so the office can send job updates and messages. The app does not access the microphone,
+            contacts or files, and contains no advertising or analytics trackers. Drivers can withdraw location permission in
+            the phone's settings at any time.
           </li>
           <li><strong>Vehicles:</strong> fleet number, registration, make, model, dimensions, weight, fuel level, mileage and maintenance records.</li>
           <li><strong>Jobs and customers:</strong> customer name and phone, pickup, stop and delivery addresses and coordinates, times, status and notes.</li>
